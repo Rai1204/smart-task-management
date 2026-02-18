@@ -1,0 +1,29 @@
+{
+  "name": "smart-task-management",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Secure, intelligent, conflict-aware task management application",
+  "workspaces": [
+    "packages/*",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev": "cross-env NODE_OPTIONS=--no-deprecation concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:contracts": "npm run build --workspace=@smart-task/contracts",
+    "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build": "npm run build:contracts && npm run build:backend && npm run build:frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
