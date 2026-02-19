@@ -177,9 +177,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <div className="font-semibold">⏰ Reminder Task</div>
+                  <div className="font-semibold">⏰ Scheduled Event</div>
                   <div className="text-xs text-gray-600 mt-1">
-                    Point-in-time events (meetings, calls)
+                    Single point in time (meetings, appointments)
                   </div>
                 </button>
                 <button
@@ -191,7 +191,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <div className="font-semibold">📋 Duration Task</div>
+                  <div className="font-semibold">📋 Project Task</div>
                   <div className="text-xs text-gray-600 mt-1">
                     Long-term tasks with deadlines
                   </div>
