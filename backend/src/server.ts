@@ -1,18 +1,17 @@
+// Load environment variables FIRST - ESM style
+import 'dotenv/config';
+
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
 
-// Load environment variables FIRST before any other imports that might use them
-dotenv.config();
-
-import { connectDatabase } from './config/database';
-import { errorHandler } from './middleware/errorHandler';
-import { swaggerSpec } from './config/swagger';
-import authRoutes from './routes/auth.routes';
-import taskRoutes from './routes/task.routes';
-import { startReminderService } from './services/reminder.service';
+import { connectDatabase } from './config/database.js';
+import { errorHandler } from './middleware/errorHandler.js';
+import { swaggerSpec } from './config/swagger.js';
+import authRoutes from './routes/auth.routes.js';
+import taskRoutes from './routes/task.routes.js';
+import { startReminderService } from './services/reminder.service.js';
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
