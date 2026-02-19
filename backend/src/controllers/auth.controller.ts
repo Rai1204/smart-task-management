@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { authService } from '../services/auth.service';
-import { asyncHandler } from '../middleware/errorHandler';
+import { authService } from '../services/auth.service.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
 import { ApiResponse } from '@smart-task/contracts';
 
 /**

@@ -1,4 +1,4 @@
-import { TaskModel } from '../models/task.model';
+import { TaskModel } from '../models/task.model.js';
 import {
   CreateTaskDto,
   UpdateTaskDto,
@@ -9,7 +9,7 @@ import {
   TaskConflict,
   ConflictCheckResponse,
 } from '@smart-task/contracts';
-import { AppError } from '../middleware/errorHandler';
+import { AppError } from '../middleware/errorHandler.js';
 
 export class TaskService {
   /**
