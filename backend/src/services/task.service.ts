@@ -36,13 +36,13 @@ export class TaskService {
       { type: TaskType.DURATION, status: { $ne: TaskStatus.COMPLETED } },
     ];
 
-    const existingTasks = await TaskModel.find(query);
+    const existingTasks = await TaskModel.find(query).sort({ startDateTime: 1 });
 
     const conflicts: TaskConflict[] = [];
     const conflictingTaskIds: string[] = [];
 
     for (const task of existingTasks) {
-      const conflict = this.detectConflict(
+      const conflict =this.detectConflict(
         { startDateTime, deadline, type },
         {
           startDateTime: task.startDateTime,
@@ -56,18 +56,38 @@ export class TaskService {
       }
     }
 
+    const response: ConflictCheckResponse = {
+      hasConflict: conflicts.length > 0 || conflictingTaskIds.length > 0,
+      conflicts: [],
+      suggestions: undefined,
+      taskDuration: undefined,
+    };
+
     if (conflictingTaskIds.length > 0) {
       conflicts.push({
         conflictsWith: conflictingTaskIds,
         message: 'You already have a task scheduled during this time.',
         severity: 'soft', // Can be overridden by user
       });
+
+      response.conflicts = conflicts;
+
+      // Only provide suggestions for duration tasks
+      if (type === TaskType.DURATION && deadline) {
+        const taskDuration = deadline.getTime() - startDateTime.getTime();
+        response.taskDuration = taskDuration;
+
+        // Find free time slots
+        const suggestions = this.findFreeTimeSlots(
+          existingTasks,
+          taskDuration,
+          startDateTime
+        );
+        response.suggestions = suggestions;
+      }
     }
 
-    return {
-      hasConflict: conflicts.length > 0,
-      conflicts,
-    };
+    return response;
   }
 
   /**
@@ -104,6 +124,93 @@ export class TaskService {
     }
 
     return false;
+  }
+
+  /**
+   * Find free time slots where a task of given duration can fit
+   */
+  private findFreeTimeSlots(
+    existingTasks: any[],
+    taskDuration: number,
+    originalStart: Date
+  ): import('@smart-task/contracts').TimeSuggestion[] {
+    const suggestions: import('@smart-task/contracts').TimeSuggestion[] = [];
+    const now = new Date();
+    
+    // Start searching from the original start time or now, whichever is later
+    let searchStart = new Date(Math.max(originalStart.getTime(), now.getTime()));
+    
+    // Search window: 7 days ahead
+    const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    // Convert existing tasks to time blocks
+    const busyBlocks = existingTasks
+      .map((task) => {
+        const start = task.startDateTime.getTime();
+        const end = task.deadline ? task.deadline.getTime() : start;
+        return { start, end };
+      })
+      .sort((a, b) => a.start - b.start);
+
+    // Find gaps between busy blocks
+    let currentTime = searchStart.getTime();
+    
+    for (const block of busyBlocks) {
+      // Check if there's a gap before this block
+      const gapDuration = block.start - currentTime;
+      
+      if (gapDuration >= taskDuration) {
+        // Found a free slot!
+        const slotStart = new Date(currentTime);
+        const slotEnd = new Date(currentTime + taskDuration);
+        
+        suggestions.push({
+          startDateTime: slotStart.toISOString(),
+          deadline: slotEnd.toISOString(),
+          reason: `Free slot before your next task`,
+        });
+        
+        // Limit to 3 suggestions
+        if (suggestions.length >= 3) {
+          break;
+        }
+      }
+      
+      // Move to the end of this block
+      currentTime = Math.max(currentTime, block.end);
+    }
+
+    // Check if there's space after all tasks
+    if (suggestions.length < 3 && currentTime < searchEnd.getTime()) {
+      const slotStart = new Date(currentTime);
+      const slotEnd = new Date(currentTime + taskDuration);
+      
+      if (slotEnd.getTime() <= searchEnd.getTime()) {
+        suggestions.push({
+          startDateTime: slotStart.toISOString(),
+          deadline: slotEnd.toISOString(),
+          reason: `Available after your scheduled tasks`,
+        });
+      }
+    }
+
+    // If no gaps found in existing schedule, suggest times after current tasks
+    if (suggestions.length === 0) {
+      // Suggest right after the last task
+      const lastBlock = busyBlocks[busyBlocks.length - 1];
+      if (lastBlock) {
+        const slotStart = new Date(lastBlock.end);
+        const slotEnd = new Date(lastBlock.end + taskDuration);
+        
+        suggestions.push({
+          startDateTime: slotStart.toISOString(),
+          deadline: slotEnd.toISOString(),
+          reason: `First available time after your tasks`,
+        });
+      }
+    }
+
+    return suggestions;
   }
 
   /**

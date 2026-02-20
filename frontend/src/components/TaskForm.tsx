@@ -39,7 +39,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
 
   // Helper to convert ISO string to datetime-local format
   const toDateTimeLocal = (isoString: string) => {
-    return new Date(isoString).toISOString().slice(0, 16);
+    const date = new Date(isoString);
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return localDate.toISOString().slice(0, 16);
   };
 
   const [formData, setFormData] = useState<CreateTaskDto>({
@@ -182,6 +184,34 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
     setShowConflictModal(false);
     // User can modify the form
     toast('Please adjust the time to avoid conflicts', { icon: '⏰' });
+  };
+
+  const handleApplySuggestion = (suggestion: import('@smart-task/contracts').TimeSuggestion) => {
+    // Convert ISO strings to datetime-local format
+    const startLocal = toDateTimeLocal(suggestion.startDateTime);
+    const deadlineLocal = toDateTimeLocal(suggestion.deadline);
+    
+    setFormData({
+      ...formData,
+      startDateTime: startLocal,
+      deadline: deadlineLocal,
+    });
+    
+    setShowConflictModal(false);
+    toast.success('Time adjusted to avoid conflicts!');
+  };
+
+  const formatDuration = (ms: number) => {
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0 && minutes > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (hours > 0) {
+      return `${hours}h`;
+    } else {
+      return `${minutes}m`;
+    }
   };
 
   return (
@@ -529,7 +559,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
       {/* Conflict Modal */}
       {showConflictModal && conflicts && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-red-600 mb-3">
               ⚠️ Scheduling Conflict
             </h3>
@@ -543,13 +573,54 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
               <p className="text-xs text-red-600 mt-1">
                 Conflicts with {conflicts.conflicts[0]?.conflictsWith.length} task(s)
               </p>
+              {conflicts.taskDuration && (
+                <p className="text-xs text-gray-600 mt-1">
+                  Task duration: {formatDuration(conflicts.taskDuration)}
+                </p>
+              )}
             </div>
+
+            {/* Time Suggestions */}
+            {conflicts.suggestions && conflicts.suggestions.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-semibold text-gray-800 mb-2">
+                  💡 Suggested Available Times:
+                </h4>
+                <div className="space-y-2">
+                  {conflicts.suggestions.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleApplySuggestion(suggestion)}
+                      className="w-full text-left p-3 bg-green-50 border border-green-200 rounded hover:bg-green-100 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-green-800">
+                            {new Date(suggestion.startDateTime).toLocaleString('en-US', { 
+                              month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true 
+                            })} →{' '}
+                            {new Date(suggestion.deadline).toLocaleString('en-US', { 
+                              hour: 'numeric', minute: '2-digit', hour12: true 
+                            })}
+                          </p>
+                          <p className="text-xs text-green-600 mt-1">
+                            {suggestion.reason}
+                          </p>
+                        </div>
+                        <span className="text-green-600 ml-2">→</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={handleConflictReschedule}
                 className="btn btn-secondary flex-1"
               >
-                Reschedule
+                Manual Reschedule
               </button>
               <button
                 onClick={handleConflictOverride}

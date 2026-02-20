@@ -93,9 +93,17 @@ export interface TaskConflict {
   severity: 'hard' | 'soft';
 }
 
+export interface TimeSuggestion {
+  startDateTime: string; // ISO string
+  deadline: string; // ISO string
+  reason: string; // Why this time is suggested
+}
+
 export interface ConflictCheckResponse {
   hasConflict: boolean;
   conflicts: TaskConflict[];
+  suggestions?: TimeSuggestion[]; // Suggested free time slots
+  taskDuration?: number; // Duration in milliseconds of the task causing conflict
 }
 
 // Zod validation schemas
