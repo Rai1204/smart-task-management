@@ -305,6 +305,18 @@ export class TaskService {
       dayOfMonth: data.recurrencePattern.dayOfMonth,
     } : undefined;
 
+    // Validate dependencies exist and belong to the user
+    if (data.dependsOn && data.dependsOn.length > 0) {
+      const dependencies = await TaskModel.find({
+        _id: { $in: data.dependsOn },
+        userId,
+      });
+      
+      if (dependencies.length !== data.dependsOn.length) {
+        throw new AppError('One or more dependency tasks not found', 400);
+      }
+    }
+
     // Create task
     const task = await TaskModel.create({
       userId,
@@ -318,12 +330,13 @@ export class TaskService {
       remindersSent: [],
       isRecurring: data.isRecurring || false,
       recurrencePattern,
+      dependsOn: data.dependsOn || [],
     });
 
     // Note: Recurring tasks are stored as single task with pattern
     // The frontend will calculate and display the current occurrence
 
-    return this.toTaskResponse(task);
+    return await this.toTaskResponse(task);
   }
 
   /**
@@ -356,7 +369,7 @@ export class TaskService {
 
     const tasks = await TaskModel.find(query).sort({ startDateTime: 1 });
 
-    return tasks.map((task) => this.toTaskResponse(task));
+    return await Promise.all(tasks.map((task) => this.toTaskResponse(task)));
   }
 
   /**
@@ -369,7 +382,7 @@ export class TaskService {
       throw new AppError('Task not found', 404);
     }
 
-    return this.toTaskResponse(task);
+    return await this.toTaskResponse(task);
   }
 
   /**
@@ -414,6 +427,54 @@ export class TaskService {
     if (data.deadline !== undefined) task.deadline = new Date(data.deadline);
     if (data.reminderEnabled !== undefined)
       task.reminderEnabled = data.reminderEnabled;
+    
+    // Update dependencies if provided
+    if (data.dependsOn !== undefined) {
+      // Validate dependencies exist and belong to the user
+      if (data.dependsOn.length > 0) {
+        const dependencies = await TaskModel.find({
+          _id: { $in: data.dependsOn },
+          userId,
+        });
+        
+        if (dependencies.length !== data.dependsOn.length) {
+          throw new AppError('One or more dependency tasks not found', 400);
+        }
+      }
+      task.dependsOn = data.dependsOn;
+    }
+
+    // Validate status change - check if dependencies are complete
+    if (data.status === TaskStatus.IN_PROGRESS && task.dependsOn && task.dependsOn.length > 0) {
+      const incompleteDeps = await TaskModel.find({
+        _id: { $in: task.dependsOn },
+        status: { $ne: TaskStatus.COMPLETED }
+      });
+      
+      if (incompleteDeps.length > 0) {
+        const depTitles = incompleteDeps.map(d => d.title).join(', ');
+        throw new AppError(
+          `Cannot start task - the following dependencies must be completed first: ${depTitles}`,
+          400
+        );
+      }
+    }
+
+    // Validate completion - also check if dependencies are complete
+    if (data.status === TaskStatus.COMPLETED && task.dependsOn && task.dependsOn.length > 0) {
+      const incompleteDeps = await TaskModel.find({
+        _id: { $in: task.dependsOn },
+        status: { $ne: TaskStatus.COMPLETED }
+      });
+      
+      if (incompleteDeps.length > 0) {
+        const depTitles = incompleteDeps.map(d => d.title).join(', ');
+        throw new AppError(
+          `Cannot complete task - the following dependencies must be completed first: ${depTitles}`,
+          400
+        );
+      }
+    }
 
     // Handle recurring task completion
     if (data.status === TaskStatus.COMPLETED && task.isRecurring && task.recurrencePattern) {
@@ -497,7 +558,7 @@ export class TaskService {
 
     await task.save();
 
-    return this.toTaskResponse(task);
+    return await this.toTaskResponse(task);
   }
 
   /**
@@ -531,7 +592,7 @@ export class TaskService {
     };
 
     const tasks = await TaskModel.find(query);
-    return tasks.map((task) => this.toTaskResponse(task));
+    return await Promise.all(tasks.map((task) => this.toTaskResponse(task)));
   }
 
   /**
@@ -546,7 +607,23 @@ export class TaskService {
   /**
    * Convert task document to response format
    */
-  private toTaskResponse(task: any): TaskResponse {
+  private async toTaskResponse(task: any): Promise<TaskResponse> {
+    const dependsOn = task.dependsOn || [];
+    
+    // Calculate if task is blocked (has incomplete dependencies)
+    let blockedBy: string[] = [];
+    let isBlocked = false;
+    
+    if (dependsOn.length > 0) {
+      const dependencies = await TaskModel.find({ 
+        _id: { $in: dependsOn },
+        status: { $ne: TaskStatus.COMPLETED }
+      });
+      
+      blockedBy = dependencies.map(d => d.id);
+      isBlocked = blockedBy.length > 0;
+    }
+
     return {
       id: task.id,
       userId: task.userId,
@@ -568,6 +645,9 @@ export class TaskService {
         dayOfMonth: task.recurrencePattern.dayOfMonth,
       } : undefined,
       parentRecurringTaskId: task.parentRecurringTaskId,
+      dependsOn,
+      blockedBy,
+      isBlocked,
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
     };

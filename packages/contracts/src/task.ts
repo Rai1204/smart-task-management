@@ -36,6 +36,7 @@ export interface Task {
   isRecurring: boolean; // Whether this task repeats
   recurrencePattern?: RecurrencePattern; // Recurrence configuration
   parentRecurringTaskId?: string; // If this is an instance of a recurring task, reference to the parent
+  dependsOn: string[]; // Array of task IDs this task depends on
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +56,9 @@ export interface TaskResponse {
   isRecurring: boolean;
   recurrencePattern?: RecurrencePattern;
   parentRecurringTaskId?: string;
+  dependsOn: string[]; // Array of task IDs this task depends on
+  blockedBy?: string[]; // Tasks that are blocking this one (calculated)
+  isBlocked?: boolean; // Whether this task is currently blocked
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +75,7 @@ export interface CreateTaskDto {
   overrideConflicts?: boolean; // Allow creating task despite conflicts
   isRecurring?: boolean; // Whether this task repeats
   recurrencePattern?: RecurrencePatternDto; // Recurrence configuration (uses ISO strings)
+  dependsOn?: string[]; // Array of task IDs this task depends on
 }
 
 // Update task DTO
@@ -84,6 +89,7 @@ export interface UpdateTaskDto {
   overrideConflicts?: boolean; // Allow updating task despite conflicts
   isRecurring?: boolean;
   recurrencePattern?: RecurrencePatternDto; // Recurrence configuration (uses ISO strings)
+  dependsOn?: string[]; // Array of task IDs this task depends on
 }
 
 // Conflict detection

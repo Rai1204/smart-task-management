@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import {
   CreateTaskDto,
   TaskType,
@@ -28,6 +28,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
   const [taskType, setTaskType] = useState<TaskType>(task?.type || TaskType.REMINDER);
   const [conflicts, setConflicts] = useState<ConflictCheckResponse | null>(null);
   const [showConflictModal, setShowConflictModal] = useState(false);
+
+  // Fetch all tasks for dependency selection
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => taskApi.getTasks(),
+  });
   const [showRecurrence, setShowRecurrence] = useState(task?.isRecurring || false);
   const [recurrenceEndType, setRecurrenceEndType] = useState<'never' | 'date' | 'occurrences'>('never');
 
@@ -59,6 +65,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
         ? new Date(task.recurrencePattern.endDate).toISOString().split('T')[0]
         : undefined,
     } : undefined,
+    dependsOn: task?.dependsOn || [],
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -287,6 +294,59 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                 <option value={Priority.MEDIUM}>Medium</option>
                 <option value={Priority.HIGH}>High</option>
               </select>
+            </div>
+
+            {/* Task Dependencies */}
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                🔗 Depends On (optional)
+              </label>
+              <select
+                multiple
+                value={formData.dependsOn || []}
+                onChange={(e) => {
+                  const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+                  setFormData({ ...formData, dependsOn: selectedOptions });
+                }}
+                className="input min-h-[100px]"
+                style={{ height: 'auto' }}
+              >
+                {allTasks
+                  .filter(t => t.id !== task?.id) // Exclude current task when editing
+                  .filter(t => t.status !== TaskStatus.COMPLETED) // Only show incomplete tasks
+                  .map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.title} ({t.priority}) - {new Date(t.startDateTime).toLocaleDateString()}
+                    </option>
+                  ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Hold Ctrl/Cmd to select multiple tasks. This task cannot start until selected tasks are completed.
+              </p>
+              {formData.dependsOn && formData.dependsOn.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {formData.dependsOn.map(depId => {
+                    const depTask = allTasks.find(t => t.id === depId);
+                    return depTask ? (
+                      <span key={depId} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                        {depTask.title}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              dependsOn: formData.dependsOn?.filter(id => id !== depId)
+                            });
+                          }}
+                          className="hover:text-blue-900"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Start Date & Time */}

@@ -95,6 +95,11 @@ const taskSchema = new Schema<TaskDocument>(
       required: false,
       index: true,
     },
+    dependsOn: {
+      type: [String],
+      default: [],
+      index: true,
+    },
   },
   {
     timestamps: true,

@@ -99,6 +99,11 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
                 ✓ Series Complete
               </span>
             )}
+            {task.isBlocked && !isRecurringCompleted && (
+              <span className="badge bg-red-100 text-red-700 border border-red-300">
+                🔒 Blocked by {task.blockedBy?.length || 0} task{task.blockedBy?.length !== 1 ? 's' : ''}
+              </span>
+            )}
             {!isRecurringCompleted && (
               <span className={`badge ${getStatusColor(task.status || TaskStatus.PENDING)}`}>
                 {(task.status || TaskStatus.PENDING).replace('-', ' ').toUpperCase()}
@@ -150,6 +155,27 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
         )}
       </div>
 
+      {/* Dependencies Info */}
+      {task.dependsOn && task.dependsOn.length > 0 && (
+        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="text-xs font-semibold text-blue-800 mb-2">
+            🔗 Dependencies ({task.dependsOn.length})
+          </div>
+          {task.isBlocked ? (
+            <div className="text-xs text-red-700">
+              ⚠️ This task is blocked. Complete the following tasks first:
+              <div className="mt-1 text-red-600 font-medium">
+                {task.blockedBy?.length} incomplete {task.blockedBy?.length === 1 ? 'dependency' : 'dependencies'}
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-green-700">
+              ✅ All dependencies completed. Task is ready to start!
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Status Change (for duration tasks) */}
       {isDurationTask && task.status !== TaskStatus.COMPLETED && !isRecurringCompleted && (
         <div className="mb-4">
@@ -168,19 +194,21 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
             </button>
             <button
               onClick={() => onStatusChange(task.id, TaskStatus.IN_PROGRESS)}
-              disabled={isUpdating}
+              disabled={isUpdating || task.isBlocked}
               className={`text-xs px-3 py-1 rounded ${
                 task.status === TaskStatus.IN_PROGRESS
                   ? 'bg-purple-200 text-purple-800'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={task.isBlocked ? 'Task is blocked by incomplete dependencies' : ''}
             >
               In Progress
             </button>
             <button
               onClick={() => onStatusChange(task.id, TaskStatus.COMPLETED)}
-              disabled={isUpdating}
+              disabled={isUpdating || task.isBlocked}
               className={`text-xs px-3 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={task.isBlocked ? 'Task is blocked by incomplete dependencies' : ''}
             >
               Complete
             </button>
@@ -193,11 +221,17 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
         <div className="mb-4">
           <button
             onClick={() => onStatusChange(task.id, TaskStatus.COMPLETED)}
-            disabled={isUpdating}
+            disabled={isUpdating || task.isBlocked}
             className="w-full text-sm px-4 py-2 rounded bg-green-500 text-white hover:bg-green-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            title={task.isBlocked ? 'Task is blocked by incomplete dependencies' : ''}
           >
             {isUpdating ? 'Updating...' : `✓ Mark as Complete${task.isRecurring ? ' (Current Occurrence)' : ''}`}
           </button>
+          {task.isBlocked && (
+            <p className="text-xs text-red-600 mt-1 text-center">
+              ⚠️ Complete dependencies first
+            </p>
+          )}
         </div>
       )}
 
