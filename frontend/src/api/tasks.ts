@@ -45,4 +45,20 @@ export const taskApi = {
     );
     return response.data.data!;
   },
+
+  getCurrentWeekWorkload: async (): Promise<any> => {
+    const response = await api.get<ApiResponse<any>>('/tasks/workload/current-week');
+    return response.data.data!;
+  },
+
+  checkOvercommitment: async (data: {
+    date: string;
+    maxHoursPerDay?: number;
+  }): Promise<any> => {
+    const response = await api.post<ApiResponse<any>>(
+      '/tasks/workload/check-overcommitment',
+      data
+    );
+    return response.data.data!;
+  },
 };

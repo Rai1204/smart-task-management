@@ -6,6 +6,8 @@ import {
   updateTask,
   deleteTask,
   checkConflict,
+  getCurrentWeekWorkload,
+  checkOvercommitment,
 } from '../controllers/task.controller.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validator.js';
@@ -29,5 +31,9 @@ router.get('/:id', getTaskById);
 router.put('/:id', validateRequest(UpdateTaskSchema), updateTask);
 router.delete('/:id', deleteTask);
 router.post('/check-conflict', checkConflict);
+
+// Workload endpoints
+router.get('/workload/current-week', getCurrentWeekWorkload);
+router.post('/workload/check-overcommitment', checkOvercommitment);
 
 export default router;

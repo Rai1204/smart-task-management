@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { taskApi } from '@/api/tasks';
 import { useAuth } from '@/context/AuthContext';
 import { TaskCard } from '@/components/TaskCard';
 import { TaskForm } from '@/components/TaskForm';
+import { WorkloadChart } from '@/components/WorkloadChart';
 import { useTaskReminders } from '@/hooks/useTaskReminders';
 import { TaskResponse, TaskStatus, TaskType, Priority } from '@smart-task/contracts';
 import toast from 'react-hot-toast';
@@ -18,6 +19,7 @@ export const DashboardPage: React.FC = () => {
   const [filterType, setFilterType] = useState<TaskType | 'all'>('all');
   const [filterPriority, setFilterPriority] = useState<Priority | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
+  const [sortBy, setSortBy] = useState<'time' | 'priority'>('priority');
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
   const { data: tasks = [], isLoading } = useQuery({
@@ -138,11 +140,42 @@ export const DashboardPage: React.FC = () => {
     return true;
   });
 
-  // Sort by start time
-  const sortedTasks = [...filteredTasks].sort(
-    (a, b) =>
-      new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime()
-  );
+  // Dynamic priority calculation
+  const calculateDynamicPriority = useCallback((task: TaskResponse): number => {
+    const priorityScores = { [Priority.LOW]: 1, [Priority.MEDIUM]: 2, [Priority.HIGH]: 3 };
+    let score = priorityScores[task.priority] * 10;
+
+    if (task.deadline) {
+      const deadline = new Date(task.deadline);
+      const now = new Date();
+      const hoursUntilDeadline = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      if (hoursUntilDeadline < 0) score += 100; // Overdue
+      else if (hoursUntilDeadline < 2) score += 50; // Critical
+      else if (hoursUntilDeadline < 6) score += 30; // Very urgent
+      else if (hoursUntilDeadline < 24) score += 20; // Urgent
+      else if (hoursUntilDeadline < 48) score += 10; // Moderately urgent
+      else if (hoursUntilDeadline < 168) score += 5; // Within a week
+    }
+
+    if (task.status === TaskStatus.IN_PROGRESS) score += 15;
+    if (task.status === TaskStatus.COMPLETED) score = -1000;
+
+    return score;
+  }, []);
+
+  // Sort tasks
+  const sortedTasks = useMemo(() => {
+    const sorted = [...filteredTasks];
+    
+    if (sortBy === 'priority') {
+      return sorted.sort((a, b) => calculateDynamicPriority(b) - calculateDynamicPriority(a));
+    } else {
+      return sorted.sort((a, b) => 
+        new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime()
+      );
+    }
+  }, [filteredTasks, sortBy, calculateDynamicPriority]);
 
   // Calculate statistics
   const totalTasks = tasks.length;
@@ -200,6 +233,11 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Workload Chart */}
+        <div className="mb-6">
+          <WorkloadChart />
+        </div>
+
         {/* Actions & Filters */}
         <div className="card mb-6">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -232,6 +270,14 @@ export const DashboardPage: React.FC = () => {
                 <option value={TaskStatus.PENDING}>Pending</option>
                 <option value={TaskStatus.IN_PROGRESS}>In Progress</option>
                 <option value={TaskStatus.COMPLETED}>Completed</option>
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium"
+              >
+                <option value="priority">🎯 Sort by Smart Priority</option>
+                <option value="time">🕒 Sort by Time</option>
               </select>
             </div>
             <button

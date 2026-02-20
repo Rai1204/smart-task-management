@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { taskService, ConflictError } from '../services/task.service.js';
+import { WorkloadService } from '../services/workload.service.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { ApiResponse } from '@smart-task/contracts';
+
+const workloadService = new WorkloadService();
 
 /**
  * @swagger
@@ -326,3 +329,81 @@ export const checkConflict = asyncHandler(
     res.status(200).json(response);
   }
 );
+
+/**
+ * @swagger
+ * /tasks/workload/current-week:
+ *   get:
+ *     summary: Get current week workload summary
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Workload summary
+ */
+export const getCurrentWeekWorkload = asyncHandler(
+  async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user!.userId;
+
+    const workload = await workloadService.getCurrentWeekWorkload(userId);
+
+    const response: ApiResponse = {
+      success: true,
+      data: workload,
+    };
+
+    res.status(200).json(response);
+  }
+);
+
+/**
+ * @swagger
+ * /tasks/workload/check-overcommitment:
+ *   post:
+ *     summary: Check if user is overcommitted on a specific date
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - date
+ *             properties:
+ *               date:
+ *                 type: string
+ *                 format: date-time
+ *               maxHoursPerDay:
+ *                 type: number
+ *                 default: 8
+ *     responses:
+ *       200:
+ *         description: Overcommitment check result
+ */
+export const checkOvercommitment = asyncHandler(
+  async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user!.userId;
+
+    const { date, maxHoursPerDay = 8 } = req.body;
+
+    const result = await workloadService.checkOvercommitment(
+      userId,
+      new Date(date),
+      maxHoursPerDay
+    );
+
+    const response: ApiResponse = {
+      success: true,
+      data: result,
+    };
+
+    res.status(200).json(response);
+  }
+);
+

@@ -10,6 +10,7 @@ import {
   ConflictCheckResponse,
   RecurrenceFrequency,
   RecurrencePattern,
+  Priority,
 } from '@smart-task/contracts';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -570,6 +571,72 @@ export class TaskService {
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * Calculate dynamic priority based on deadline proximity and base priority
+   * Returns a score where higher = more urgent
+   */
+  calculateDynamicPriority(task: TaskResponse, now: Date = new Date()): number {
+    // Base priority scores
+    const priorityScores = {
+      [Priority.LOW]: 1,
+      [Priority.MEDIUM]: 2,
+      [Priority.HIGH]: 3,
+    };
+
+    let score = priorityScores[task.priority] * 10;
+
+    // For tasks with deadlines, adjust based on time remaining
+    if (task.deadline) {
+      const deadline = new Date(task.deadline);
+      const hoursUntilDeadline = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      // Urgency multiplier based on hours remaining
+      if (hoursUntilDeadline < 0) {
+        // Overdue - highest priority
+        score += 100;
+      } else if (hoursUntilDeadline < 2) {
+        // Less than 2 hours - critical
+        score += 50;
+      } else if (hoursUntilDeadline < 6) {
+        // Less than 6 hours - very urgent
+        score += 30;
+      } else if (hoursUntilDeadline < 24) {
+        // Less than 24 hours - urgent
+        score += 20;
+      } else if (hoursUntilDeadline < 48) {
+        // Less than 2 days - moderately urgent
+        score += 10;
+      } else if (hoursUntilDeadline < 168) {
+        // Less than 1 week
+        score += 5;
+      }
+    }
+
+    // In-progress tasks get a boost
+    if (task.status === TaskStatus.IN_PROGRESS) {
+      score += 15;
+    }
+
+    // Completed tasks should be at the bottom
+    if (task.status === TaskStatus.COMPLETED) {
+      score = -1000;
+    }
+
+    return score;
+  }
+
+  /**
+   * Sort tasks by dynamic priority
+   */
+  sortByDynamicPriority(tasks: TaskResponse[]): TaskResponse[] {
+    const now = new Date();
+    return tasks.sort((a, b) => {
+      const scoreA = this.calculateDynamicPriority(a, now);
+      const scoreB = this.calculateDynamicPriority(b, now);
+      return scoreB - scoreA; // Higher score first
+    });
   }
 }
 
