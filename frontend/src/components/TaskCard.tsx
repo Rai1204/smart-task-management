@@ -1,19 +1,22 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { TaskResponse, Priority, TaskStatus, TaskType } from '@smart-task/contracts';
+import { calculateCurrentOccurrence, formatRecurrenceText } from '@/utils/recurrence';
 
 interface TaskCardProps {
   task: TaskResponse;
   onEdit: (task: TaskResponse) => void;
   onDelete: (taskId: string) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
+  isUpdating?: boolean;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({
+const TaskCardComponent: React.FC<TaskCardProps> = ({
   task,
   onEdit,
   onDelete,
   onStatusChange,
+  isUpdating = false,
 }) => {
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
@@ -41,10 +44,23 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     return format(new Date(dateString), 'MMM dd, yyyy h:mm a');
   };
 
+  // For recurring tasks, calculate the current occurrence
+  const currentOccurrence = task.isRecurring 
+    ? calculateCurrentOccurrence(task)
+    : null;
+
+  // Determine dates to display (current occurrence for recurring, actual dates for one-time)
+  const displayStartDate = currentOccurrence 
+    ? currentOccurrence.currentDate 
+    : new Date(task.startDateTime);
+  
   const isOverdue = task.deadline && new Date(task.deadline) < new Date();
-  const isReminderOverdue = task.type === TaskType.REMINDER && new Date(task.startDateTime) < new Date();
+  const isReminderOverdue = currentOccurrence 
+    ? currentOccurrence.isOverdue && !currentOccurrence.isCompleted
+    : (task.type === TaskType.REMINDER && new Date(task.startDateTime) < new Date());
   const isDurationTask = task.type === TaskType.DURATION;
   const isReminderTask = task.type === TaskType.REMINDER;
+  const isRecurringCompleted = currentOccurrence?.isCompleted || false;
 
   return (
     <div
@@ -69,9 +85,25 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             <span className="badge bg-gray-100 text-gray-700">
               {task.type === TaskType.REMINDER ? '⏰ Event' : '📋 Project'}
             </span>
-            <span className={`badge ${getStatusColor(task.status || TaskStatus.PENDING)}`}>
-              {(task.status || TaskStatus.PENDING).replace('-', ' ').toUpperCase()}
-            </span>
+            {task.isRecurring && !isRecurringCompleted && task.recurrencePattern && (
+              <span className="badge bg-purple-100 text-purple-700">
+                {task.recurrencePattern.endDate
+                  ? `🔄 Until ${format(new Date(task.recurrencePattern.endDate), 'MMM dd')}`
+                  : task.recurrencePattern.occurrences
+                  ? `🔄 ${task.recurrencePattern.occurrences} left`
+                  : '🔄 Recurring'}
+              </span>
+            )}
+            {isRecurringCompleted && (
+              <span className="badge bg-gray-100 text-gray-600">
+                ✓ Series Complete
+              </span>
+            )}
+            {!isRecurringCompleted && (
+              <span className={`badge ${getStatusColor(task.status || TaskStatus.PENDING)}`}>
+                {(task.status || TaskStatus.PENDING).replace('-', ' ').toUpperCase()}
+              </span>
+            )}
             {task.reminderEnabled && (
               <span className="badge bg-blue-100 text-blue-700">🔔 Reminders On</span>
             )}
@@ -81,22 +113,27 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
       {/* Time Info */}
       <div className="space-y-2 mb-4 text-sm">
+        {task.isRecurring && task.recurrencePattern && (
+          <div className="text-purple-700 text-xs font-medium mb-2">
+            {formatRecurrenceText(task.recurrencePattern)}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <span className="text-gray-600 font-medium">
-            {isReminderTask ? 'Scheduled:' : 'Start:'}
+            {task.isRecurring ? 'Current:' : isReminderTask ? 'Scheduled:' : 'Start:'}
           </span>
           <span
             className={`${
-              isReminderOverdue && task.status !== TaskStatus.COMPLETED
+              isReminderOverdue && task.status !== TaskStatus.COMPLETED && !isRecurringCompleted
                 ? 'text-red-600 font-semibold'
                 : 'text-gray-900'
             }`}
           >
-            {formatDateTime(task.startDateTime)}
-            {isReminderOverdue && task.status !== TaskStatus.COMPLETED && ' (OVERDUE!)'}
+            {formatDateTime(displayStartDate.toISOString())}
+            {isReminderOverdue && task.status !== TaskStatus.COMPLETED && !isRecurringCompleted && ' (OVERDUE!)'}
           </span>
         </div>
-        {task.deadline && (
+        {task.deadline && !task.isRecurring && (
           <div className="flex items-center gap-2">
             <span className="text-gray-600 font-medium">Deadline:</span>
             <span
@@ -114,33 +151,36 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       </div>
 
       {/* Status Change (for duration tasks) */}
-      {isDurationTask && task.status !== TaskStatus.COMPLETED && (
+      {isDurationTask && task.status !== TaskStatus.COMPLETED && !isRecurringCompleted && (
         <div className="mb-4">
           <label className="text-xs text-gray-600 mb-1 block">Update Status:</label>
           <div className="flex gap-2">
             <button
               onClick={() => onStatusChange(task.id, TaskStatus.PENDING)}
+              disabled={isUpdating}
               className={`text-xs px-3 py-1 rounded ${
                 task.status === TaskStatus.PENDING
                   ? 'bg-blue-200 text-blue-800'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               Pending
             </button>
             <button
               onClick={() => onStatusChange(task.id, TaskStatus.IN_PROGRESS)}
+              disabled={isUpdating}
               className={`text-xs px-3 py-1 rounded ${
                 task.status === TaskStatus.IN_PROGRESS
                   ? 'bg-purple-200 text-purple-800'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               In Progress
             </button>
             <button
               onClick={() => onStatusChange(task.id, TaskStatus.COMPLETED)}
-              className={`text-xs px-3 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200`}
+              disabled={isUpdating}
+              className={`text-xs px-3 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               Complete
             </button>
@@ -149,14 +189,24 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       )}
 
       {/* Mark Complete (for reminder tasks) */}
-      {isReminderTask && task.status !== TaskStatus.COMPLETED && (
+      {isReminderTask && task.status !== TaskStatus.COMPLETED && !isRecurringCompleted && (
         <div className="mb-4">
           <button
             onClick={() => onStatusChange(task.id, TaskStatus.COMPLETED)}
-            className="w-full text-sm px-4 py-2 rounded bg-green-500 text-white hover:bg-green-600 transition-colors font-medium"
+            disabled={isUpdating}
+            className="w-full text-sm px-4 py-2 rounded bg-green-500 text-white hover:bg-green-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            ✓ Mark as Complete
+            {isUpdating ? 'Updating...' : `✓ Mark as Complete${task.isRecurring ? ' (Current Occurrence)' : ''}`}
           </button>
+        </div>
+      )}
+
+      {/* Recurring series completed message */}
+      {isRecurringCompleted && (
+        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded text-center">
+          <span className="text-sm text-gray-600">
+            ✓ All occurrences completed
+          </span>
         </div>
       )}
 
@@ -178,3 +228,23 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     </div>
   );
 };
+
+// Memoize to prevent unnecessary re-renders when other tasks change
+export const TaskCard = React.memo(TaskCardComponent, (prevProps, nextProps) => {
+  // Only re-render if something actually changed for THIS task
+  const taskChanged = 
+    prevProps.task.id !== nextProps.task.id ||
+    prevProps.task.status !== nextProps.task.status ||
+    prevProps.task.startDateTime !== nextProps.task.startDateTime ||
+    prevProps.task.deadline !== nextProps.task.deadline ||
+    prevProps.task.title !== nextProps.task.title ||
+    prevProps.task.priority !== nextProps.task.priority ||
+    prevProps.task.reminderEnabled !== nextProps.task.reminderEnabled ||
+    prevProps.task.updatedAt !== nextProps.task.updatedAt ||
+    JSON.stringify(prevProps.task.recurrencePattern) !== JSON.stringify(nextProps.task.recurrencePattern);
+  
+  const updatingChanged = prevProps.isUpdating !== nextProps.isUpdating;
+  
+  // Return true to SKIP re-render (props are equal), false to re-render
+  return !taskChanged && !updatingChanged;
+});

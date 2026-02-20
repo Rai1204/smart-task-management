@@ -18,10 +18,18 @@ export enum TaskStatus {
   COMPLETED = 'completed',
 }
 
+export enum RecurrenceFrequency {
+  DAILY = 'daily',
+  WEEKLY = 'weekly',
+  MONTHLY = 'monthly',
+  YEARLY = 'yearly',
+}
+
 // Zod schemas for validation
 export const PrioritySchema = z.enum(['low', 'medium', 'high']);
 export const TaskTypeSchema = z.enum(['reminder', 'duration']);
 export const TaskStatusSchema = z.enum(['pending', 'in-progress', 'completed']);
+export const RecurrenceFrequencySchema = z.enum(['daily', 'weekly', 'monthly', 'yearly']);
 
 // Common response types
 export interface ApiResponse<T = unknown> {

@@ -1,7 +1,42 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { Task, TaskType, Priority, TaskStatus } from '@smart-task/contracts';
+import { Task, TaskType, Priority, TaskStatus, RecurrenceFrequency } from '@smart-task/contracts';
 
 export interface TaskDocument extends Omit<Task, 'id'>, Document {}
+
+const recurrencePatternSchema = new Schema(
+  {
+    frequency: {
+      type: String,
+      enum: Object.values(RecurrenceFrequency),
+      required: true,
+    },
+    interval: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    endDate: {
+      type: Date,
+      required: false,
+    },
+    occurrences: {
+      type: Number,
+      required: false,
+      min: 1,
+    },
+    daysOfWeek: {
+      type: [Number],
+      required: false,
+    },
+    dayOfMonth: {
+      type: Number,
+      required: false,
+      min: 1,
+      max: 31,
+    },
+  },
+  { _id: false } // Don't create separate _id for subdocument
+);
 
 const taskSchema = new Schema<TaskDocument>(
   {
@@ -47,6 +82,19 @@ const taskSchema = new Schema<TaskDocument>(
       type: [Number],
       default: [],
     },
+    isRecurring: {
+      type: Boolean,
+      default: false,
+    },
+    recurrencePattern: {
+      type: recurrencePatternSchema,
+      required: false,
+    },
+    parentRecurringTaskId: {
+      type: String,
+      required: false,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -76,6 +124,15 @@ taskSchema.pre('save', function (next) {
       this.status = TaskStatus.PENDING;
     }
   }
+
+  // Validate recurrence pattern
+  if (this.isRecurring && !this.recurrencePattern) {
+    next(new Error('Recurring tasks must have a recurrence pattern'));
+  }
+  if (this.recurrencePattern && !this.isRecurring) {
+    next(new Error('Non-recurring tasks cannot have a recurrence pattern'));
+  }
+  
   next();
 });
 

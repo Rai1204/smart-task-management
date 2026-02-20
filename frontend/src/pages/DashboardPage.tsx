@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { taskApi } from '@/api/tasks';
@@ -18,6 +18,7 @@ export const DashboardPage: React.FC = () => {
   const [filterType, setFilterType] = useState<TaskType | 'all'>('all');
   const [filterPriority, setFilterPriority] = useState<Priority | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
@@ -41,14 +42,63 @@ export const DashboardPage: React.FC = () => {
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
       taskApi.updateTask(id, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success('Status updated');
+    onMutate: async ({ id, status }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['tasks'] });
+      
+      // Set updating state immediately
+      setUpdatingTaskId(id);
+      
+      // Snapshot the previous value
+      const previousTasks = queryClient.getQueryData<TaskResponse[]>(['tasks']);
+      
+      // Check if this is a recurring completion (don't optimistically update - backend will change it)
+      const task = previousTasks?.find(t => t.id === id);
+      const isRecurringCompletion = task?.isRecurring && status === TaskStatus.COMPLETED;
+      
+      if (!isRecurringCompletion) {
+        // Optimistically update the cache for non-recurring completions
+        queryClient.setQueryData<TaskResponse[]>(['tasks'], (old) => 
+          old?.map(t => t.id === id ? { ...t, status, updatedAt: new Date().toISOString() } : t) || []
+        );
+      }
+      
+      return { previousTasks, id, isRecurringCompletion };
     },
-    onError: () => {
+    onSuccess: (updatedTask, _variables, context) => {
+      if (context?.isRecurringCompletion) {
+        // For recurring completions, backend auto-advances - need full refetch
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        toast.success('Moved to next occurrence!', { icon: '🔄' });
+      } else {
+        // For regular updates, just update the specific task in cache
+        queryClient.setQueryData<TaskResponse[]>(['tasks'], (old) => 
+          old?.map(t => t.id === updatedTask.id ? updatedTask : t) || []
+        );
+        toast.success('Status updated');
+      }
+    },
+    onError: (_error, _variables, context) => {
+      // Rollback to previous state on error
+      if (context?.previousTasks) {
+        queryClient.setQueryData(['tasks'], context.previousTasks);
+      }
       toast.error('Failed to update status');
     },
+    onSettled: () => {
+      // Clear updating state after a brief delay to smooth transitions
+      setTimeout(() => setUpdatingTaskId(null), 100);
+    },
   });
+
+  // Store mutation functions in refs to keep callbacks stable
+  const deleteTaskMutationRef = useRef(deleteTaskMutation);
+  const updateStatusMutationRef = useRef(updateStatusMutation);
+  
+  useEffect(() => {
+    deleteTaskMutationRef.current = deleteTaskMutation;
+    updateStatusMutationRef.current = updateStatusMutation;
+  }, [deleteTaskMutation, updateStatusMutation]);
 
   const handleLogout = () => {
     logout();
@@ -56,25 +106,25 @@ export const DashboardPage: React.FC = () => {
     toast.success('Logged out successfully');
   };
 
-  const handleDeleteTask = (taskId: string) => {
+  const handleDeleteTask = useCallback((taskId: string) => {
     if (window.confirm('Are you sure you want to delete this task?')) {
-      deleteTaskMutation.mutate(taskId);
+      deleteTaskMutationRef.current.mutate(taskId);
     }
-  };
+  }, []);
 
-  const handleStatusChange = (taskId: string, status: TaskStatus) => {
-    updateStatusMutation.mutate({ id: taskId, status });
-  };
+  const handleStatusChange = useCallback((taskId: string, status: TaskStatus) => {
+    updateStatusMutationRef.current.mutate({ id: taskId, status });
+  }, []);
 
-  const handleEditTask = (task: TaskResponse) => {
+  const handleEditTask = useCallback((task: TaskResponse) => {
     setEditingTask(task);
     setShowTaskForm(true);
-  };
+  }, []);
 
-  const handleCloseTaskForm = () => {
+  const handleCloseTaskForm = useCallback(() => {
     setShowTaskForm(false);
     setEditingTask(null);
-  };
+  }, []);
 
   // Filter tasks
   const filteredTasks = tasks.filter((task) => {
@@ -228,6 +278,7 @@ export const DashboardPage: React.FC = () => {
                 onEdit={handleEditTask}
                 onDelete={handleDeleteTask}
                 onStatusChange={handleStatusChange}
+                isUpdating={updatingTaskId === task.id}
               />
             ))}
           </div>

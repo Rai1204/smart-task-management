@@ -8,6 +8,8 @@ import {
   CreateTaskSchema,
   ConflictCheckResponse,
   TaskResponse,
+  RecurrenceFrequency,
+
 } from '@smart-task/contracts';
 import { taskApi } from '@/api/tasks';
 import { getErrorMessage } from '@/lib/axios';
@@ -26,6 +28,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
   const [taskType, setTaskType] = useState<TaskType>(task?.type || TaskType.REMINDER);
   const [conflicts, setConflicts] = useState<ConflictCheckResponse | null>(null);
   const [showConflictModal, setShowConflictModal] = useState(false);
+  const [showRecurrence, setShowRecurrence] = useState(task?.isRecurring || false);
+  const [recurrenceEndType, setRecurrenceEndType] = useState<'never' | 'date' | 'occurrences'>('never');
 
   // Get current date/time for min attribute (format: YYYY-MM-DDTHH:MM)
   const now = new Date();
@@ -46,6 +50,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
     deadline: task?.deadline ? toDateTimeLocal(task.deadline) : undefined,
     status: task?.status || undefined,
     reminderEnabled: task?.reminderEnabled || false,
+    isRecurring: task?.isRecurring || false,
+    recurrencePattern: task?.recurrencePattern ? {
+      ...task.recurrencePattern,
+      endDate: task.recurrencePattern.endDate 
+        ? new Date(task.recurrencePattern.endDate).toISOString().split('T')[0]
+        : undefined,
+    } : undefined,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -110,6 +121,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
       deadline: formData.deadline 
         ? new Date(formData.deadline).toISOString() 
         : undefined,
+      // Convert recurrence pattern endDate to ISO string
+      recurrencePattern: formData.recurrencePattern && formData.isRecurring
+        ? {
+            ...formData.recurrencePattern,
+            endDate: formData.recurrencePattern.endDate
+              ? new Date(formData.recurrencePattern.endDate).toISOString()
+              : undefined,
+          }
+        : undefined,
       // When editing, allow override to avoid conflicts with itself
       ...(isEditing && { overrideConflicts: true }),
     };
@@ -142,6 +162,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
         : '',
       deadline: formData.deadline 
         ? new Date(formData.deadline).toISOString() 
+        : undefined,
+      // Convert recurrence pattern endDate to ISO string
+      recurrencePattern: formData.recurrencePattern && formData.isRecurring
+        ? {
+            ...formData.recurrencePattern,
+            endDate: formData.recurrencePattern.endDate
+              ? new Date(formData.recurrencePattern.endDate).toISOString()
+              : undefined,
+          }
         : undefined,
       overrideConflicts: true,
     };
@@ -294,6 +323,184 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                 className="w-4 h-4 text-primary-600"
               />
               <label className="ml-2 text-sm">Enable smart reminders</label>
+            </div>
+
+            {/* Recurrence Section */}
+            <div className="border-t pt-4">
+              <div className="flex items-center mb-3">
+                <input
+                  type="checkbox"
+                  checked={showRecurrence}
+                  onChange={(e) => {
+                    setShowRecurrence(e.target.checked);
+                    if (!e.target.checked) {
+                      setFormData({...formData, isRecurring: false, recurrencePattern: undefined});
+                    } else {
+                      setFormData({
+                        ...formData,
+                        isRecurring: true,
+                        recurrencePattern: {
+                          frequency: RecurrenceFrequency.DAILY,
+                          interval: 1,
+                        }
+                      });
+                    }
+                  }}
+                  className="w-4 h-4 text-primary-600"
+                />
+                <label className="ml-2 text-sm font-medium">🔄 Repeat this task</label>
+              </div>
+
+              {showRecurrence && (
+                <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                  {/* Frequency */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Repeat Every</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formData.recurrencePattern?.interval ||1}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          recurrencePattern: {
+                            ...formData.recurrencePattern!,
+                            interval: parseInt(e.target.value) || 1
+                          }
+                        })}
+                        className="input text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Period</label>
+                      <select
+                        value={formData.recurrencePattern?.frequency || RecurrenceFrequency.DAILY}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          recurrencePattern: {
+                            ...formData.recurrencePattern!,
+                            frequency: e.target.value as RecurrenceFrequency
+                          }
+                        })}
+                        className="input text-sm"
+                      >
+                        <option value={RecurrenceFrequency.DAILY}>Day(s)</option>
+                        <option value={RecurrenceFrequency.WEEKLY}>Week(s)</option>
+                        <option value={RecurrenceFrequency.MONTHLY}>Month(s)</option>
+                        <option value={RecurrenceFrequency.YEARLY}>Year(s)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* End Condition */}
+                  <div>
+                    <label className="block text-xs font-medium mb-2">Ends</label>
+                    <div className="space-y-2">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          checked={recurrenceEndType === 'never'}
+                          onChange={() => {
+                            setRecurrenceEndType('never');
+                            setFormData({
+                              ...formData,
+                              recurrencePattern: {
+                                ...formData.recurrencePattern!,
+                                endDate: undefined,
+                                occurrences: undefined,
+                              }
+                            });
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">Never</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          checked={recurrenceEndType === 'date'}
+                          onChange={() => {
+                            setRecurrenceEndType('date');
+                            // Initialize with a default date (7 days from start)
+                            const defaultEndDate = formData.startDateTime 
+                              ? new Date(new Date(formData.startDateTime).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                              : undefined;
+                            setFormData({
+                              ...formData,
+                              recurrencePattern: {
+                                ...formData.recurrencePattern!,
+                                endDate: defaultEndDate as any,
+                                occurrences: undefined,
+                              }
+                            });
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">On date</span>
+                      </label>
+                      {recurrenceEndType === 'date' && (
+                        <input
+                          type="date"
+                          min={formData.startDateTime ? formData.startDateTime.split('T')[0] : undefined}
+                          value={
+                            formData.recurrencePattern?.endDate 
+                              ? String(formData.recurrencePattern.endDate).split('T')[0]
+                              : ''
+                          }
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            recurrencePattern: {
+                              ...formData.recurrencePattern!,
+                              endDate: e.target.value as any,
+                              occurrences: undefined,
+                            }
+                          })}
+                          className="input text-sm ml-6 w-full"
+                        />
+                      )}
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          checked={recurrenceEndType === 'occurrences'}
+                          onChange={() => {
+                            setRecurrenceEndType('occurrences');
+                            setFormData({
+                              ...formData,
+                              recurrencePattern: {
+                                ...formData.recurrencePattern!,
+                                occurrences: 10, // Default to 10 occurrences
+                                endDate: undefined,
+                              }
+                            });
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">After</span>
+                      </label>
+                      {recurrenceEndType === 'occurrences' && (
+                        <div className="flex items-center ml-6">
+                          <input
+                            type="number"
+                            min="1"
+                            max="365"
+                            value={formData.recurrencePattern?.occurrences || 10}
+                            onChange={(e) => setFormData({
+                              ...formData,
+                              recurrencePattern: {
+                                ...formData.recurrencePattern!,
+                                occurrences: parseInt(e.target.value) || 1,
+                                endDate: undefined,
+                              }
+                            })}
+                            className="input text-sm w-20"
+                          />
+                          <span className="ml-2 text-sm">occurrences</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Actions */}

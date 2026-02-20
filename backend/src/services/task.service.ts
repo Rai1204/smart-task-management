@@ -8,6 +8,8 @@ import {
   TaskStatus,
   TaskConflict,
   ConflictCheckResponse,
+  RecurrenceFrequency,
+  RecurrencePattern,
 } from '@smart-task/contracts';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -105,6 +107,65 @@ export class TaskService {
   }
 
   /**
+   * Calculate next occurrence date based on recurrence pattern
+   */
+  private calculateNextOccurrence(
+    currentDate: Date,
+    pattern: RecurrencePattern
+  ): Date | null {
+    const next = new Date(currentDate);
+
+    switch (pattern.frequency) {
+      case RecurrenceFrequency.DAILY:
+        next.setDate(next.getDate() + pattern.interval);
+        break;
+
+      case RecurrenceFrequency.WEEKLY:
+        if (pattern.daysOfWeek && pattern.daysOfWeek.length > 0) {
+          // Find next day of week from the daysOfWeek array
+          const currentDay = next.getDay();
+          const sortedDays = [...pattern.daysOfWeek].sort((a, b) => a - b);
+          
+          let foundNext = false;
+          for (const day of sortedDays) {
+            if (day > currentDay) {
+              next.setDate(next.getDate() + (day - currentDay));
+              foundNext = true;
+              break;
+            }
+          }
+          
+          if (!foundNext) {
+            // Wrap to next week, first day in pattern
+            const daysUntilNext = (7 - currentDay + sortedDays[0]) * pattern.interval;
+            next.setDate(next.getDate() + daysUntilNext);
+          }
+        } else {
+          next.setDate(next.getDate() + (7 * pattern.interval));
+        }
+        break;
+
+      case RecurrenceFrequency.MONTHLY:
+        if (pattern.dayOfMonth) {
+          next.setMonth(next.getMonth() + pattern.interval);
+          next.setDate(pattern.dayOfMonth);
+        } else {
+          next.setMonth(next.getMonth() + pattern.interval);
+        }
+        break;
+
+      case RecurrenceFrequency.YEARLY:
+        next.setFullYear(next.getFullYear() + pattern.interval);
+        break;
+
+      default:
+        return null;
+    }
+
+    return next;
+  }
+
+  /**
    * Create a new task
    */
   async createTask(userId: string, data: CreateTaskDto): Promise<TaskResponse> {
@@ -126,6 +187,16 @@ export class TaskService {
       }
     }
 
+    // Prepare recurrence pattern if provided
+    const recurrencePattern = data.recurrencePattern ? {
+      frequency: data.recurrencePattern.frequency,
+      interval: data.recurrencePattern.interval,
+      endDate: data.recurrencePattern.endDate ? new Date(data.recurrencePattern.endDate) : undefined,
+      occurrences: data.recurrencePattern.occurrences,
+      daysOfWeek: data.recurrencePattern.daysOfWeek,
+      dayOfMonth: data.recurrencePattern.dayOfMonth,
+    } : undefined;
+
     // Create task
     const task = await TaskModel.create({
       userId,
@@ -137,7 +208,12 @@ export class TaskService {
       status: data.status,
       reminderEnabled: data.reminderEnabled || false,
       remindersSent: [],
+      isRecurring: data.isRecurring || false,
+      recurrencePattern,
     });
+
+    // Note: Recurring tasks are stored as single task with pattern
+    // The frontend will calculate and display the current occurrence
 
     return this.toTaskResponse(task);
   }
@@ -228,13 +304,87 @@ export class TaskService {
     if (data.startDateTime !== undefined)
       task.startDateTime = new Date(data.startDateTime);
     if (data.deadline !== undefined) task.deadline = new Date(data.deadline);
-    if (data.status !== undefined) task.status = data.status;
     if (data.reminderEnabled !== undefined)
       task.reminderEnabled = data.reminderEnabled;
 
-    // If task is marked as completed, stop reminders
-    if (data.status === TaskStatus.COMPLETED) {
-      task.reminderEnabled = false;
+    // Handle recurring task completion
+    if (data.status === TaskStatus.COMPLETED && task.isRecurring && task.recurrencePattern) {
+      // Store original start time for deadline calculation
+      const originalStartTime = new Date(task.startDateTime);
+      
+      // Check if this is occurrence-based and we've reached the last occurrence
+      if (task.recurrencePattern.occurrences !== undefined) {
+        if (task.recurrencePattern.occurrences <= 1) {
+          // This was the last occurrence - mark series as completed
+          task.status = TaskStatus.COMPLETED;
+          task.reminderEnabled = false;
+        } else {
+          // Decrement occurrences count
+          task.recurrencePattern.occurrences -= 1;
+          
+          // Calculate next occurrence
+          const nextOccurrence = this.calculateNextOccurrence(task.startDateTime, task.recurrencePattern);
+          
+          if (nextOccurrence) {
+            // Move to next occurrence
+            task.startDateTime = nextOccurrence;
+            
+            // If duration task, adjust deadline by same time difference
+            if (task.deadline && task.type === TaskType.DURATION) {
+              const timeDiff = task.deadline.getTime() - originalStartTime.getTime();
+              task.deadline = new Date(nextOccurrence.getTime() + timeDiff);
+            }
+            
+            // Reset for next occurrence
+            task.status = TaskStatus.PENDING;
+            task.remindersSent = [];
+          } else {
+            // Can't calculate next occurrence - mark as completed
+            task.status = TaskStatus.COMPLETED;
+            task.reminderEnabled = false;
+          }
+        }
+      } else {
+        // Date-based recurrence or never-ending
+        // Calculate next occurrence
+        const nextOccurrence = this.calculateNextOccurrence(task.startDateTime, task.recurrencePattern);
+        
+        if (nextOccurrence) {
+          // Check if next occurrence exceeds end date
+          const endDate = task.recurrencePattern.endDate;
+          if (endDate && nextOccurrence > endDate) {
+            // Series ended - mark as completed
+            task.status = TaskStatus.COMPLETED;
+            task.reminderEnabled = false;
+          } else {
+            // Move to next occurrence
+            task.startDateTime = nextOccurrence;
+            
+            // If duration task, adjust deadline by same time difference
+            if (task.deadline && task.type === TaskType.DURATION) {
+              const timeDiff = task.deadline.getTime() - originalStartTime.getTime();
+              task.deadline = new Date(nextOccurrence.getTime() + timeDiff);
+            }
+            
+            // Reset for next occurrence
+            task.status = TaskStatus.PENDING;
+            task.remindersSent = [];
+            // Keep reminderEnabled as is (user's preference)
+          }
+        } else {
+          // No more occurrences - mark as completed
+          task.status = TaskStatus.COMPLETED;
+          task.reminderEnabled = false;
+        }
+      }
+    } else if (data.status !== undefined) {
+      // Non-recurring task or status change other than completion
+      task.status = data.status;
+      
+      // If task is marked as completed, stop reminders
+      if (data.status === TaskStatus.COMPLETED) {
+        task.reminderEnabled = false;
+      }
     }
 
     await task.save();
@@ -300,6 +450,16 @@ export class TaskService {
       status: task.status,
       reminderEnabled: task.reminderEnabled,
       remindersSent: task.remindersSent,
+      isRecurring: task.isRecurring || false,
+      recurrencePattern: task.recurrencePattern ? {
+        frequency: task.recurrencePattern.frequency,
+        interval: task.recurrencePattern.interval,
+        endDate: task.recurrencePattern.endDate?.toISOString(),
+        occurrences: task.recurrencePattern.occurrences,
+        daysOfWeek: task.recurrencePattern.daysOfWeek,
+        dayOfMonth: task.recurrencePattern.dayOfMonth,
+      } : undefined,
+      parentRecurringTaskId: task.parentRecurringTaskId,
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
     };
