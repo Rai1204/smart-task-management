@@ -6,9 +6,9 @@ import {
   updateTask,
   deleteTask,
   checkConflict,
-} from '../controllers/task.controller';
-import { authenticate } from '../middleware/auth';
-import { validateRequest } from '../middleware/validator';
+} from '../controllers/task.controller.js';
+import { authenticate } from '../middleware/auth.js';
+import { validateRequest } from '../middleware/validator.js';
 import { CreateTaskSchema, UpdateTaskSchema } from '@smart-task/contracts';
 
 const router = Router();

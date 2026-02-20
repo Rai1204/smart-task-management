@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { JwtPayload } from '@smart-task/contracts';
-import { AppError } from './errorHandler';
+import { AppError } from './errorHandler.js';
 
 // Extend Express Request type
 export interface AuthRequest extends Request {

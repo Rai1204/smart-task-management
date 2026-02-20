@@ -69,9 +69,12 @@ taskSchema.pre('save', function (next) {
       this.status = TaskStatus.PENDING;
     }
   } else if (this.type === TaskType.REMINDER) {
-    // Reminder tasks should not have deadline or status
+    // Reminder tasks should not have deadline but can have status
     this.deadline = undefined;
-    this.status = undefined;
+    // Allow status for reminder tasks (for marking complete)
+    if (!this.status) {
+      this.status = TaskStatus.PENDING;
+    }
   }
   next();
 });

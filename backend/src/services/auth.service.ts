@@ -1,8 +1,8 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { UserModel } from '../models/user.model';
+import { UserModel } from '../models/user.model.js';
 import { RegisterDto, LoginDto, AuthResponse } from '@smart-task/contracts';
-import { AppError } from '../middleware/errorHandler';
+import { AppError } from '../middleware/errorHandler.js';
 
 export class AuthService {
   private readonly jwtSecret: string;

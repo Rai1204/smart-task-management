@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { taskService } from './task.service';
+import { taskService } from './task.service.js';
 import { TaskType, TaskResponse } from '@smart-task/contracts';
 
 export class ReminderService {

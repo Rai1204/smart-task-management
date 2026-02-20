@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { taskService, ConflictError } from '../services/task.service';
-import { asyncHandler } from '../middleware/errorHandler';
-import { AuthRequest } from '../middleware/auth';
+import { taskService, ConflictError } from '../services/task.service.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
+import { AuthRequest } from '../middleware/auth.js';
 import { ApiResponse } from '@smart-task/contracts';
 
 /**

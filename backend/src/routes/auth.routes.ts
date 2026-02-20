@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { register, login } from '../controllers/auth.controller';
-import { validateRequest } from '../middleware/validator';
+import { register, login } from '../controllers/auth.controller.js';
+import { validateRequest } from '../middleware/validator.js';
 import { RegisterSchema, LoginSchema } from '@smart-task/contracts';
 
 const router = Router();

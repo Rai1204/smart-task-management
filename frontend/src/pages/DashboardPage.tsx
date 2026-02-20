@@ -80,7 +80,11 @@ export const DashboardPage: React.FC = () => {
   const filteredTasks = tasks.filter((task) => {
     if (filterType !== 'all' && task.type !== filterType) return false;
     if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
-    if (filterStatus !== 'all' && task.status !== filterStatus) return false;
+    if (filterStatus !== 'all') {
+      // Handle tasks without status (treat as pending)
+      const taskStatus = task.status || TaskStatus.PENDING;
+      if (taskStatus !== filterStatus) return false;
+    }
     return true;
   });
 

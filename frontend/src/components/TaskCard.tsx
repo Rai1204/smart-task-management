@@ -42,7 +42,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   };
 
   const isOverdue = task.deadline && new Date(task.deadline) < new Date();
+  const isReminderOverdue = task.type === TaskType.REMINDER && new Date(task.startDateTime) < new Date();
   const isDurationTask = task.type === TaskType.DURATION;
+  const isReminderTask = task.type === TaskType.REMINDER;
 
   return (
     <div
@@ -65,13 +67,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               {task.priority.toUpperCase()}
             </span>
             <span className="badge bg-gray-100 text-gray-700">
-              {task.type === TaskType.REMINDER ? '⏰ Reminder' : '📋 Duration'}
+              {task.type === TaskType.REMINDER ? '⏰ Event' : '📋 Project'}
             </span>
-            {task.status && (
-              <span className={`badge ${getStatusColor(task.status)}`}>
-                {task.status.replace('-', ' ').toUpperCase()}
-              </span>
-            )}
+            <span className={`badge ${getStatusColor(task.status || TaskStatus.PENDING)}`}>
+              {(task.status || TaskStatus.PENDING).replace('-', ' ').toUpperCase()}
+            </span>
             {task.reminderEnabled && (
               <span className="badge bg-blue-100 text-blue-700">🔔 Reminders On</span>
             )}
@@ -82,8 +82,19 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       {/* Time Info */}
       <div className="space-y-2 mb-4 text-sm">
         <div className="flex items-center gap-2">
-          <span className="text-gray-600 font-medium">Start:</span>
-          <span className="text-gray-900">{formatDateTime(task.startDateTime)}</span>
+          <span className="text-gray-600 font-medium">
+            {isReminderTask ? 'Scheduled:' : 'Start:'}
+          </span>
+          <span
+            className={`${
+              isReminderOverdue && task.status !== TaskStatus.COMPLETED
+                ? 'text-red-600 font-semibold'
+                : 'text-gray-900'
+            }`}
+          >
+            {formatDateTime(task.startDateTime)}
+            {isReminderOverdue && task.status !== TaskStatus.COMPLETED && ' (OVERDUE!)'}
+          </span>
         </div>
         {task.deadline && (
           <div className="flex items-center gap-2">
@@ -134,6 +145,18 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               Complete
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Mark Complete (for reminder tasks) */}
+      {isReminderTask && task.status !== TaskStatus.COMPLETED && (
+        <div className="mb-4">
+          <button
+            onClick={() => onStatusChange(task.id, TaskStatus.COMPLETED)}
+            className="w-full text-sm px-4 py-2 rounded bg-green-500 text-white hover:bg-green-600 transition-colors font-medium"
+          >
+            ✓ Mark as Complete
+          </button>
         </div>
       )}
 
