@@ -12,6 +12,7 @@ import {
 
 } from '@smart-task/contracts';
 import { taskApi } from '@/api/tasks';
+import { projectApi } from '@/api/projects';
 import { getErrorMessage } from '@/lib/axios';
 import toast from 'react-hot-toast';
 import axios from 'axios';
@@ -33,6 +34,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
   const { data: allTasks = [] } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => taskApi.getTasks(),
+  });
+  
+  // Fetch all projects for project selection
+  const { data: allProjects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectApi.getProjects(),
   });
   const [showRecurrence, setShowRecurrence] = useState(task?.isRecurring || false);
   const [recurrenceEndType, setRecurrenceEndType] = useState<'never' | 'date' | 'occurrences'>('never');
@@ -67,6 +74,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
     } : undefined,
     dependsOn: task?.dependsOn || [],
     parentTaskId: task?.parentTaskId,
+    projectId: task?.projectId,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -76,7 +84,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
       ? (data: CreateTaskDto) => taskApi.updateTask(task!.id, data)
       : taskApi.createTask,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.refetchQueries({ queryKey: ['tasks'] });
+      queryClient.refetchQueries({ queryKey: ['projects'] });
       toast.success(isEditing ? 'Task updated successfully!' : 'Task created successfully!');
       onSuccess?.();
       onClose();
@@ -295,6 +304,59 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                 <option value={Priority.MEDIUM}>Medium</option>
                 <option value={Priority.HIGH}>High</option>
               </select>
+            </div>
+
+            {/* Project Assignment */}
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                📁 Project (optional)
+              </label>
+              <select
+                value={formData.projectId || ''}
+                onChange={(e) => {
+                  setFormData({ ...formData, projectId: e.target.value || undefined });
+                }}
+                className="input"
+              >
+                <option value="">None - No project</option>
+                {allProjects.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Assign this task to a project for better organization.
+              </p>
+              {formData.projectId && (
+                <div className="mt-2">
+                  {(() => {
+                    const project = allProjects.find(p => p.id === formData.projectId);
+                    return project ? (
+                      <span 
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded"
+                        style={{ 
+                          backgroundColor: `${project.color}20`,
+                          color: project.color,
+                          borderColor: project.color,
+                          borderWidth: '1px'
+                        }}
+                      >
+                        {project.name}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, projectId: undefined });
+                          }}
+                          className="hover:opacity-70"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+              )}
             </div>
 
             {/* Parent Task (for creating subtasks) */}

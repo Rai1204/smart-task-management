@@ -128,6 +128,92 @@ export class TaskService {
   }
 
   /**
+   * Check if adding a task would exceed 24 hours in a single day
+   */
+  private async checkDailyHourLimit(
+    userId: string,
+    startDateTime: Date,
+    deadline: Date | undefined,
+    type: TaskType,
+    excludeTaskId?: string
+  ): Promise<{ exceeds: boolean; maxDay?: string; maxHours?: number }> {
+    // Only check for duration tasks
+    if (type !== TaskType.DURATION || !deadline) {
+      return { exceeds: false };
+    }
+
+    // Get all duration tasks for the user (including completed to match workload display)
+    const query: any = {
+      userId,
+      type: TaskType.DURATION,
+      ...(excludeTaskId && { _id: { $ne: excludeTaskId } }),
+    };
+
+    const existingTasks = await TaskModel.find(query);
+
+    // Calculate hours per day including the new task
+    const dailyHours = new Map<string, number>();
+
+    // Helper function to add hours for a task across days it spans
+    const addTaskHours = (taskStart: Date, taskEnd: Date) => {
+      let currentDay = new Date(taskStart);
+      currentDay.setHours(0, 0, 0, 0);
+      
+      const lastDay = new Date(taskEnd);
+      lastDay.setHours(0, 0, 0, 0);
+
+      while (currentDay <= lastDay) {
+        // Use local date string instead of ISO to avoid timezone shifts
+        const year = currentDay.getFullYear();
+        const month = String(currentDay.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDay.getDate()).padStart(2, '0');
+        const dateKey = `${year}-${month}-${day}`;
+        
+        const dayStart = new Date(currentDay);
+        const dayEnd = new Date(currentDay);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        const effectiveStart = new Date(Math.max(taskStart.getTime(), dayStart.getTime()));
+        const effectiveEnd = new Date(Math.min(taskEnd.getTime(), dayEnd.getTime()));
+        
+        const hoursOnThisDay = (effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60);
+
+        if (hoursOnThisDay > 0) {
+          dailyHours.set(dateKey, (dailyHours.get(dateKey) || 0) + hoursOnThisDay);
+        }
+        
+        currentDay.setDate(currentDay.getDate() + 1);
+      }
+    };
+
+    // Add hours from existing tasks
+    for (const task of existingTasks) {
+      const taskEnd = task.deadline || task.startDateTime;
+      addTaskHours(task.startDateTime, taskEnd);
+    }
+
+    // Add hours from the new task
+    addTaskHours(startDateTime, deadline);
+
+    // Check if any day exceeds 24 hours
+    let maxHours = 0;
+    let maxDay = '';
+    
+    for (const [day, hours] of dailyHours.entries()) {
+      if (hours > maxHours) {
+        maxHours = hours;
+        maxDay = day;
+      }
+    }
+
+    if (maxHours > 24) {
+      return { exceeds: true, maxDay, maxHours };
+    }
+
+    return { exceeds: false };
+  }
+
+  /**
    * Find free time slots where a task of given duration can fit
    */
   private findFreeTimeSlots(
@@ -293,6 +379,28 @@ export class TaskService {
         // Return conflict information - frontend will handle the decision
         throw new ConflictError('Task conflict detected', conflictCheck);
       }
+      
+      // Check daily hour limit (24 hours max per day)
+      const dailyLimitCheck = await this.checkDailyHourLimit(
+        userId,
+        startDateTime,
+        deadline,
+        data.type
+      );
+      
+      if (dailyLimitCheck.exceeds) {
+        const date = new Date(dailyLimitCheck.maxDay!);
+        const formattedDate = date.toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+        throw new AppError(
+          `Cannot schedule task: ${formattedDate} would have ${dailyLimitCheck.maxHours!.toFixed(1)} hours (max 24 hours per day). Please adjust the task duration or reschedule.`,
+          400
+        );
+      }
     }
 
     // Prepare recurrence pattern if provided
@@ -347,6 +455,7 @@ export class TaskService {
       recurrencePattern,
       dependsOn: data.dependsOn || [],
       parentTaskId: data.parentTaskId,
+      projectId: data.projectId,
     });
 
     // Note: Recurring tasks are stored as single task with pattern
@@ -433,6 +542,29 @@ export class TaskService {
       if (conflictCheck.hasConflict) {
         throw new ConflictError('Task conflict detected', conflictCheck);
       }
+      
+      // Check daily hour limit (24 hours max per day)
+      const dailyLimitCheck = await this.checkDailyHourLimit(
+        userId,
+        startDateTime,
+        deadline,
+        task.type,
+        taskId
+      );
+      
+      if (dailyLimitCheck.exceeds) {
+        const date = new Date(dailyLimitCheck.maxDay!);
+        const formattedDate = date.toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+        throw new AppError(
+          `Cannot update task: ${formattedDate} would have ${dailyLimitCheck.maxHours!.toFixed(1)} hours (max 24 hours per day). Please adjust the task duration or reschedule.`,
+          400
+        );
+      }
     }
 
     // Update fields
@@ -479,6 +611,11 @@ export class TaskService {
         }
       }
       task.parentTaskId = data.parentTaskId;
+    }
+
+    // Update project if provided
+    if (data.projectId !== undefined) {
+      task.projectId = data.projectId;
     }
 
     // Validate completion - check if this task has incomplete subtasks
@@ -796,6 +933,7 @@ export class TaskService {
       parentTaskId: task.parentTaskId,
       subtasks: subtasks.length > 0 ? subtasks : undefined,
       progress,
+      projectId: task.projectId,
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
     };

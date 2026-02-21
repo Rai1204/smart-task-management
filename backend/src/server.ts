@@ -11,6 +11,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { swaggerSpec } from './config/swagger.js';
 import authRoutes from './routes/auth.routes.js';
 import taskRoutes from './routes/task.routes.js';
+import projectRoutes from './routes/project.routes.js';
 import { startReminderService } from './services/reminder.service.js';
 
 const app: Application = express();
@@ -39,6 +40,7 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 const apiPrefix = process.env.API_PREFIX || '/api';
 app.use(`${apiPrefix}/auth`, authRoutes);
 app.use(`${apiPrefix}/tasks`, taskRoutes);
+app.use(`${apiPrefix}/projects`, projectRoutes);
 
 // Error handling
 app.use(errorHandler);

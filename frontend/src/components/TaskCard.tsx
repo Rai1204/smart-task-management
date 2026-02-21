@@ -4,6 +4,7 @@ import { TaskResponse, Priority, TaskStatus, TaskType } from '@smart-task/contra
 import { calculateCurrentOccurrence, formatRecurrenceText } from '@/utils/recurrence';
 import { useQuery } from '@tanstack/react-query';
 import { taskApi } from '@/api/tasks';
+import { projectApi } from '@/api/projects';
 
 interface TaskCardProps {
   task: TaskResponse;
@@ -24,6 +25,12 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
   const { data: allTasks = [] } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => taskApi.getTasks(),
+  });
+
+  // Fetch all projects to show project info
+  const { data: allProjects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectApi.getProjects(),
   });
 
   const getPriorityColor = (priority: Priority) => {
@@ -96,6 +103,22 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
             <span className="badge bg-gray-100 text-gray-700">
               {task.type === TaskType.REMINDER ? '⏰ Event' : '📋 Project'}
             </span>
+            {task.projectId && (() => {
+              const project = allProjects.find(p => p.id === task.projectId);
+              return project ? (
+                <span 
+                  className="badge text-xs"
+                  style={{ 
+                    backgroundColor: `${project.color}20`,
+                    color: project.color,
+                    borderColor: project.color,
+                    borderWidth: '1px'
+                  }}
+                >
+                  📁 {project.name}
+                </span>
+              ) : null;
+            })()}
             {task.isRecurring && !isRecurringCompleted && task.recurrencePattern && (
               <span className="badge bg-purple-100 text-purple-700">
                 {task.recurrencePattern.endDate

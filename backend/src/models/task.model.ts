@@ -105,6 +105,11 @@ const taskSchema = new Schema<TaskDocument>(
       required: false,
       index: true,
     },
+    projectId: {
+      type: String,
+      required: false,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -117,6 +122,7 @@ taskSchema.index({ userId: 1, deadline: 1 });
 taskSchema.index({ userId: 1, status: 1 });
 taskSchema.index({ userId: 1, type: 1 });
 taskSchema.index({ userId: 1, parentTaskId: 1 });
+taskSchema.index({ userId: 1, projectId: 1 });
 
 // Validate that duration tasks have required fields
 taskSchema.pre('save', function (next) {

@@ -33,7 +33,8 @@ export const DashboardPage: React.FC = () => {
   const deleteTaskMutation = useMutation({
     mutationFn: taskApi.deleteTask,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.refetchQueries({ queryKey: ['tasks'] });
+      queryClient.refetchQueries({ queryKey: ['projects'] });
       toast.success('Task deleted successfully');
     },
     onError: () => {
@@ -70,13 +71,16 @@ export const DashboardPage: React.FC = () => {
     onSuccess: (updatedTask, _variables, context) => {
       if (context?.isRecurringCompletion) {
         // For recurring completions, backend auto-advances - need full refetch
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        queryClient.refetchQueries({ queryKey: ['tasks'] });
+        queryClient.refetchQueries({ queryKey: ['projects'] });
         toast.success('Moved to next occurrence!', { icon: '🔄' });
       } else {
         // For regular updates, just update the specific task in cache
         queryClient.setQueryData<TaskResponse[]>(['tasks'], (old) => 
           old?.map(t => t.id === updatedTask.id ? updatedTask : t) || []
         );
+        // Also refetch projects to update task counts
+        queryClient.refetchQueries({ queryKey: ['projects'] });
         toast.success('Status updated');
       }
     },
@@ -201,12 +205,20 @@ export const DashboardPage: React.FC = () => {
                 Welcome back, {user?.name}!
               </p>
             </div>
-            <button
-              onClick={handleLogout}
-              className="btn btn-secondary text-sm"
-            >
-              Logout
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/projects')}
+                className="btn btn-primary text-sm"
+              >
+                📁 Projects
+              </button>
+              <button
+                onClick={handleLogout}
+                className="btn btn-secondary text-sm"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>

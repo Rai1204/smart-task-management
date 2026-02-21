@@ -38,6 +38,7 @@ export interface Task {
   parentRecurringTaskId?: string; // If this is an instance of a recurring task, reference to the parent
   dependsOn: string[]; // Array of task IDs this task depends on
   parentTaskId?: string; // If this is a subtask, reference to the parent task
+  projectId?: string; // If this task belongs to a project
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +64,7 @@ export interface TaskResponse {
   parentTaskId?: string; // If this is a subtask, reference to the parent task
   subtasks?: string[]; // Array of subtask IDs (calculated)
   progress?: number; // Completion percentage 0-100, calculated from subtasks
+  projectId?: string; // If this task belongs to a project
   createdAt: string;
   updatedAt: string;
 }
@@ -81,6 +83,7 @@ export interface CreateTaskDto {
   recurrencePattern?: RecurrencePatternDto; // Recurrence configuration (uses ISO strings)
   dependsOn?: string[]; // Array of task IDs this task depends on
   parentTaskId?: string; // If this is a subtask, reference to the parent task
+  projectId?: string; // If this task belongs to a project
 }
 
 // Update task DTO
@@ -96,6 +99,7 @@ export interface UpdateTaskDto {
   recurrencePattern?: RecurrencePatternDto; // Recurrence configuration (uses ISO strings)
   dependsOn?: string[]; // Array of task IDs this task depends on
   parentTaskId?: string; // If this is a subtask, reference to the parent task
+  projectId?: string; // If this task belongs to a project
 }
 
 // Conflict detection

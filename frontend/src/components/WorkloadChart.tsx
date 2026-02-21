@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { taskApi } from '@/api/tasks';
 import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface DailyWorkload {
   date: string;
@@ -11,6 +12,7 @@ interface DailyWorkload {
     title: string;
     hours: number;
     priority: string;
+    status: string;
   }[];
 }
 
@@ -23,12 +25,29 @@ interface WorkloadSummary {
 }
 
 export const WorkloadChart: React.FC = () => {
+  const queryClient = useQueryClient();
   const [workload, setWorkload] = useState<WorkloadSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchWorkload();
-  }, []);
+    
+    // Listen for task changes and refresh
+    const handleTaskChange = () => {
+      fetchWorkload();
+    };
+    
+    // Refetch when tasks query is invalidated
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (event?.query?.queryKey?.[0] === 'tasks') {
+        fetchWorkload();
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [queryClient]);
 
   const fetchWorkload = async () => {
     try {
@@ -145,8 +164,11 @@ export const WorkloadChart: React.FC = () => {
                   <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded p-2 shadow-lg z-10 w-48">
                     <div className="font-semibold mb-1">{formatDate(day.date)}</div>
                     {day.tasks.map((task, taskIndex) => (
-                      <div key={taskIndex} className="flex justify-between py-1">
-                        <span className="truncate pr-2">{task.title}</span>
+                      <div key={taskIndex} className="flex justify-between py-1 border-b border-gray-700 last:border-0">
+                        <span className={`truncate pr-2 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
+                          {task.status === 'completed' ? '✓ ' : ''}
+                          {task.title}
+                        </span>
                         <span className="text-gray-300">{task.hours.toFixed(1)}h</span>
                       </div>
                     ))}
