@@ -205,6 +205,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
     onSuccess: () => {
       queryClient.refetchQueries({ queryKey: ['tasks'] });
       queryClient.refetchQueries({ queryKey: ['projects'] });
+      queryClient.refetchQueries({ queryKey: ['workload', 'current-week'] });
       toast.success(isEditing ? 'Task updated successfully!' : 'Task created successfully!');
       onSuccess?.();
       onClose();

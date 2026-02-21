@@ -10,7 +10,7 @@ export interface DailyWorkload {
     title: string;
     hours: number;
     priority: string;
-    status: string;
+    status?: TaskStatus;
   }[];
 }
 
@@ -46,10 +46,6 @@ export class WorkloadService {
       const taskStart = new Date(task.startDateTime);
       const taskEnd = task.deadline ? new Date(task.deadline) : taskStart;
       
-      // Calculate task duration in hours
-      const durationMs = taskEnd.getTime() - taskStart.getTime();
-      const durationHours = durationMs / (1000 * 60 * 60);
-
       // Distribute hours across all days the task spans
       let currentDay = new Date(taskStart);
       currentDay.setHours(0, 0, 0, 0);
@@ -110,7 +106,13 @@ export class WorkloadService {
     const dailyWorkloads: DailyWorkload[] = [];
     let currentDate = new Date(startDate);
     let carryOverHours = 0;
-    const carryOverTasks: Array<{ id: string; title: string; hours: number; priority: string; status: string }> = [];
+    const carryOverTasks: Array<{
+      id: string;
+      title: string;
+      hours: number;
+      priority: string;
+      status?: TaskStatus;
+    }> = [];
     
     while (currentDate <= endDate) {
       // Use local date string instead of ISO to avoid timezone shifts

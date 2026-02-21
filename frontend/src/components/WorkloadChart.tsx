@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { taskApi } from '@/api/tasks';
 import toast from 'react-hot-toast';
-import { useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 
 interface DailyWorkload {
@@ -27,47 +26,27 @@ interface WorkloadSummary {
 }
 
 export const WorkloadChart: React.FC = () => {
-  const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
-  const [workload, setWorkload] = useState<WorkloadSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: workload,
+    isLoading: loading,
+    isError,
+  } = useQuery<WorkloadSummary>({
+    queryKey: ['workload', 'current-week'],
+    queryFn: () => taskApi.getCurrentWeekWorkload(),
+    enabled: isAuthenticated,
+    retry: 1,
+  });
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setWorkload(null);
-      setLoading(false);
-      return;
-    }
-
-    fetchWorkload();
-
-    // Refetch when tasks query is invalidated
-    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (event?.query?.queryKey?.[0] === 'tasks' && isAuthenticated) {
-        fetchWorkload();
-      }
-    });
-    
-    return () => {
-      unsubscribe();
-    };
-  }, [queryClient, isAuthenticated]);
-
-  const fetchWorkload = async () => {
-    try {
-      setLoading(true);
-      const data = await taskApi.getCurrentWeekWorkload();
-      setWorkload(data);
-    } catch (error) {
-      if (axios.isCancel(error)) {
-        return;
-      }
-      console.error('Failed to fetch workload:', error);
+    if (isError) {
       toast.error('Failed to load workload data');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [isError]);
+
+  if (isError) {
+    return null;
+  }
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

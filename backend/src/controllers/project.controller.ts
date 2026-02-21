@@ -2,14 +2,16 @@ import { Request, Response } from 'express';
 import { ProjectService } from '../services/project.service.js';
 import { CreateProjectSchema, UpdateProjectSchema, ApiResponse } from '@smart-task/contracts';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { AuthRequest } from '../middleware/auth.js';
 
 const projectService = new ProjectService();
 
 export const createProject = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
   // Validate request body
   const validatedData = CreateProjectSchema.parse(req.body);
   
-  const project = await projectService.createProject(req.user!.userId, validatedData);
+  const project = await projectService.createProject(authReq.user!.userId, validatedData);
   
   const response: ApiResponse = {
     success: true,
@@ -21,7 +23,8 @@ export const createProject = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const getProjects = asyncHandler(async (req: Request, res: Response) => {
-  const projects = await projectService.getProjects(req.user!.userId, req.query);
+  const authReq = req as AuthRequest;
+  const projects = await projectService.getProjects(authReq.user!.userId, req.query);
   
   const response: ApiResponse = {
     success: true,
@@ -32,7 +35,8 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getProjectById = asyncHandler(async (req: Request, res: Response) => {
-  const project = await projectService.getProjectById(req.user!.userId, req.params.id);
+  const authReq = req as AuthRequest;
+  const project = await projectService.getProjectById(authReq.user!.userId, req.params.id);
   
   const response: ApiResponse = {
     success: true,
@@ -43,11 +47,12 @@ export const getProjectById = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const updateProject = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
   // Validate request body
   const validatedData = UpdateProjectSchema.parse(req.body);
   
   const project = await projectService.updateProject(
-    req.user!.userId,
+    authReq.user!.userId,
     req.params.id,
     validatedData
   );
@@ -62,7 +67,8 @@ export const updateProject = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const deleteProject = asyncHandler(async (req: Request, res: Response) => {
-  await projectService.deleteProject(req.user!.userId, req.params.id);
+  const authReq = req as AuthRequest;
+  await projectService.deleteProject(authReq.user!.userId, req.params.id);
   
   res.status(204).send();
 });

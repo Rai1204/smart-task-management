@@ -52,6 +52,7 @@ export const DashboardPage: React.FC = () => {
     onSuccess: () => {
       queryClient.refetchQueries({ queryKey: ['tasks'] });
       queryClient.refetchQueries({ queryKey: ['projects'] });
+      queryClient.refetchQueries({ queryKey: ['workload', 'current-week'] });
       toast.success('Task deleted successfully');
     },
     onError: () => {
@@ -90,6 +91,7 @@ export const DashboardPage: React.FC = () => {
         // For recurring completions, backend auto-advances - need full refetch
         queryClient.refetchQueries({ queryKey: ['tasks'] });
         queryClient.refetchQueries({ queryKey: ['projects'] });
+        queryClient.refetchQueries({ queryKey: ['workload', 'current-week'] });
         toast.success('Moved to next occurrence!', { icon: '🔄' });
       } else {
         // For regular updates, just update the specific task in cache
@@ -100,6 +102,7 @@ export const DashboardPage: React.FC = () => {
         queryClient.refetchQueries({ queryKey: ['tasks'] });
         // Also refetch projects to update task counts
         queryClient.refetchQueries({ queryKey: ['projects'] });
+        queryClient.refetchQueries({ queryKey: ['workload', 'current-week'] });
         toast.success('Status updated');
       }
     },
