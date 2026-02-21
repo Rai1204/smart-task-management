@@ -27,7 +27,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
   return (
     <div
-      className={`card hover:shadow-lg transition-all border-l-4 ${
+      className={`card-glass hover:shadow-glass-lg transition-all duration-300 hover:scale-[1.02] border-l-4 ${
         onClick ? 'cursor-pointer' : ''
       }`}
       style={{ borderColor: project.color }}
@@ -38,24 +38,24 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2">
             <div
-              className="w-4 h-4 rounded-full"
+              className="w-4 h-4 rounded-full shadow-md"
               style={{ backgroundColor: project.color }}
             />
-            <h3 className="text-lg font-semibold text-gray-900">{project.name}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{project.name}</h3>
           </div>
           {project.description && (
-            <p className="text-sm text-gray-600 mb-3">{project.description}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{project.description}</p>
           )}
         </div>
       </div>
 
       {/* Progress Bar */}
       <div className="mb-4">
-        <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
           <span>Progress</span>
           <span className="font-semibold">{project.progress}%</span>
         </div>
-        <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
+        <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
           <div
             className="h-full transition-all duration-300"
             style={{
@@ -68,23 +68,23 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-gray-50 rounded p-2">
-          <div className="text-xs text-gray-500">Tasks</div>
-          <div className="text-lg font-semibold text-gray-900">{project.taskCount || 0}</div>
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
+          <div className="text-xs text-gray-500 dark:text-gray-400">Tasks</div>
+          <div className="text-lg font-semibold text-gray-900 dark:text-white">{project.taskCount || 0}</div>
         </div>
-        <div className="bg-gray-50 rounded p-2">
-          <div className="text-xs text-gray-500">Completed</div>
-          <div className="text-lg font-semibold text-green-600">{project.completedTaskCount || 0}</div>
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
+          <div className="text-xs text-gray-500 dark:text-gray-400">Completed</div>
+          <div className="text-lg font-semibold text-green-600 dark:text-green-400">{project.completedTaskCount || 0}</div>
         </div>
       </div>
 
       {/* Deadline */}
       {project.deadline && (
         <div className="mb-4 text-sm">
-          <span className="text-gray-600">Deadline: </span>
+          <span className="text-gray-600 dark:text-gray-400">Deadline: </span>
           <span
             className={`font-medium ${
-              isOverdue ? 'text-red-600' : 'text-gray-900'
+              isOverdue ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'
             }`}
           >
             {format(new Date(project.deadline), 'MMM dd, yyyy')}
@@ -96,28 +96,28 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       {/* Status Badge */}
       <div className="mb-4">
         {project.progress === 100 ? (
-          <span className="badge bg-green-100 text-green-800 border border-green-300">
+          <span className="badge bg-accent-100 dark:bg-accent-900/30 text-accent-800 dark:text-accent-300 border border-accent-300 dark:border-accent-700">
             ✓ Complete
           </span>
         ) : (project.progress || 0) > 0 ? (
-          <span className="badge bg-blue-100 text-blue-800 border border-blue-300">
+          <span className="badge bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300 border border-primary-300 dark:border-primary-700">
             🔄 In Progress
           </span>
         ) : (
-          <span className="badge bg-gray-100 text-gray-800 border border-gray-300">
+          <span className="badge bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 border border-gray-300 dark:border-gray-600">
             ⏳ Not Started
           </span>
         )}
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2 pt-3 border-t">
+      <div className="flex gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
         <button
           onClick={(e) => {
             e.stopPropagation();
             onEdit(project);
           }}
-          className="text-sm text-primary-600 hover:underline"
+          className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
         >
           Edit
         </button>
@@ -128,7 +128,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
               onDelete(project.id);
             }
           }}
-          className="text-sm text-red-600 hover:underline"
+          className="text-sm text-red-600 dark:text-red-400 hover:underline"
         >
           Delete
         </button>

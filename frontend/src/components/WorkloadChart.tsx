@@ -72,10 +72,10 @@ export const WorkloadChart: React.FC = () => {
   };
 
   const getBarColor = (hours: number) => {
-    if (hours <= 4) return 'bg-green-500';
-    if (hours <= 8) return 'bg-blue-500';
-    if (hours <= 10) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (hours <= 4) return 'bg-gray-400 dark:bg-gray-500';
+    if (hours <= 8) return 'bg-primary-400 dark:bg-primary-500';
+    if (hours <= 10) return 'bg-primary-600 dark:bg-primary-500';
+    return 'bg-accent-600 dark:bg-accent-500';
   };
 
   if (loading) {
@@ -181,28 +181,28 @@ export const WorkloadChart: React.FC = () => {
       </div>
 
       {/* Legend */}
-      <div className="mt-4 flex justify-center gap-4 text-xs">
+      <div className="mt-4 flex justify-center gap-4 text-xs text-gray-600 dark:text-gray-400">
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-green-500 rounded"></div>
+          <div className="w-3 h-3 bg-gray-400 dark:bg-gray-500 rounded"></div>
           <span>Light (≤4h)</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-blue-500 rounded"></div>
+          <div className="w-3 h-3 bg-primary-400 dark:bg-primary-500 rounded"></div>
           <span>Moderate (4-8h)</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-yellow-500 rounded"></div>
+          <div className="w-3 h-3 bg-primary-600 dark:bg-primary-500 rounded"></div>
           <span>Heavy (8-10h)</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-red-500 rounded"></div>
+          <div className="w-3 h-3 bg-accent-600 dark:bg-accent-500 rounded"></div>
           <span>Overloaded ({'>'}10h)</span>
         </div>
       </div>
 
       {/* Warning if overcommitted */}
       {workload.maxHoursPerDay > 8 && (
-        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+        <div className="mt-4 p-3 bg-accent-50 dark:bg-accent-900/20 border border-accent-200 dark:border-accent-700 rounded text-sm text-accent-800 dark:text-accent-300">
           ⚠️ <span className="font-semibold">Warning:</span> You're scheduled for {workload.maxHoursPerDay.toFixed(1)} hours on{' '}
           {formatDate(workload.busiestDay)}. Consider rescheduling some tasks to avoid burnout.
         </div>

@@ -5,6 +5,7 @@ import { LoginSchema, LoginDto } from '@smart-task/contracts';
 import { authApi } from '@/api/auth';
 import { useAuth } from '@/context/AuthContext';
 import { getErrorMessage } from '@/lib/axios';
+import ThemeToggle from '@/components/ThemeToggle';
 import toast from 'react-hot-toast';
 
 export const LoginPage: React.FC = () => {
@@ -55,41 +56,46 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100">
-      <div className="card max-w-md w-full">
-        <h1 className="text-3xl font-bold text-center mb-2">Welcome Back</h1>
-        <p className="text-gray-600 text-center mb-6">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100 dark:from-gray-900 dark:to-gray-800 transition-colors duration-300">
+      {/* Theme Toggle - Top Right */}
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      
+      <div className="card-glass max-w-md w-full mx-4 animate-scale-in">
+        <h1 className="text-3xl font-bold text-center mb-2 text-gray-900 dark:text-white">Welcome Back</h1>
+        <p className="text-gray-600 dark:text-gray-400 text-center mb-6">
           Sign in to continue managing your tasks
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
+            <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Email</label>
             <input
               type="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
-              className={`input ${errors.email ? 'border-red-500' : ''}`}
+              className={`input ${errors.email ? 'border-red-500 dark:border-red-400' : ''}`}
               placeholder="john@example.com"
             />
             {errors.email && (
-              <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+              <p className="text-red-500 dark:text-red-400 text-sm mt-1">{errors.email}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Password</label>
+            <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Password</label>
             <input
               type="password"
               name="password"
               value={formData.password}
               onChange={handleChange}
-              className={`input ${errors.password ? 'border-red-500' : ''}`}
+              className={`input ${errors.password ? 'border-red-500 dark:border-red-400' : ''}`}
               placeholder="••••••••"
             />
             {errors.password && (
-              <p className="text-red-500 text-sm mt-1">{errors.password}</p>
+              <p className="text-red-500 dark:text-red-400 text-sm mt-1">{errors.password}</p>
             )}
           </div>
 
@@ -102,9 +108,9 @@ export const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        <p className="text-center mt-4 text-sm">
+        <p className="text-center mt-4 text-sm text-gray-600 dark:text-gray-400">
           Don't have an account?{' '}
-          <Link to="/register" className="text-primary-600 hover:underline font-medium">
+          <Link to="/register" className="text-primary-600 dark:text-primary-400 hover:underline font-medium">
             Sign Up
           </Link>
         </p>

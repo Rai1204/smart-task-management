@@ -36,22 +36,22 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
       case Priority.HIGH:
-        return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border-red-300 dark:border-red-700';
       case Priority.MEDIUM:
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-300 dark:border-yellow-700';
       case Priority.LOW:
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-300 dark:border-green-700';
     }
   };
 
   const getStatusColor = (status: TaskStatus) => {
     switch (status) {
       case TaskStatus.COMPLETED:
-        return 'bg-green-100 text-green-800';
+        return 'bg-accent-100 dark:bg-accent-900/30 text-accent-800 dark:text-accent-300 border-accent-300 dark:border-accent-700';
       case TaskStatus.IN_PROGRESS:
-        return 'bg-purple-100 text-purple-800';
+        return 'bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300 border-primary-300 dark:border-primary-700';
       case TaskStatus.PENDING:
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600';
     }
   };
 
@@ -82,18 +82,18 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
 
   return (
     <div
-      className={`card hover:shadow-lg transition-shadow border-l-4 ${
+      className={`card-glass hover:shadow-glass-lg transition-all duration-300 hover:scale-[1.02] border-l-4 ${
         task.priority === Priority.HIGH
-          ? 'border-l-red-500'
+          ? 'border-l-red-500 dark:border-l-red-400'
           : task.priority === Priority.MEDIUM
-          ? 'border-l-yellow-500'
-          : 'border-l-green-500'
+          ? 'border-l-yellow-500 dark:border-l-yellow-400'
+          : 'border-l-green-500 dark:border-l-green-400'
       }`}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900">{task.title}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{task.title}</h3>
           <div className="flex gap-2 mt-2 flex-wrap">
             <span
               className={`badge ${getPriorityColor(task.priority)} border`}
