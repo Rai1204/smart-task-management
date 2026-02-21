@@ -66,6 +66,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
         : undefined,
     } : undefined,
     dependsOn: task?.dependsOn || [],
+    parentTaskId: task?.parentTaskId,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -294,6 +295,54 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                 <option value={Priority.MEDIUM}>Medium</option>
                 <option value={Priority.HIGH}>High</option>
               </select>
+            </div>
+
+            {/* Parent Task (for creating subtasks) */}
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                📂 Parent Task (optional)
+              </label>
+              <select
+                value={formData.parentTaskId || ''}
+                onChange={(e) => {
+                  setFormData({ ...formData, parentTaskId: e.target.value || undefined });
+                }}
+                className="input"
+              >
+                <option value="">None - Top-level task</option>
+                {allTasks
+                  .filter(t => t.id !== task?.id) // Exclude current task when editing
+                  .filter(t => !t.parentTaskId) // Only show top-level tasks as potential parents
+                  .map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.title} ({t.priority})
+                    </option>
+                  ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Make this a subtask of another task. Progress will be tracked on the parent.
+              </p>
+              {formData.parentTaskId && (
+                <div className="mt-2">
+                  {(() => {
+                    const parentTask = allTasks.find(t => t.id === formData.parentTaskId);
+                    return parentTask ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded">
+                        Parent: {parentTask.title}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, parentTaskId: undefined });
+                          }}
+                          className="hover:text-purple-900"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+              )}
             </div>
 
             {/* Task Dependencies */}

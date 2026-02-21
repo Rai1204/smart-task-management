@@ -317,6 +317,21 @@ export class TaskService {
       }
     }
 
+    // Validate parent task exists and belongs to the user
+    if (data.parentTaskId) {
+      const parentTask = await TaskModel.findOne({
+        _id: data.parentTaskId,
+        userId,
+      });
+      
+      if (!parentTask) {
+        throw new AppError('Parent task not found', 400);
+      }
+      
+      // Prevent circular relationships - check if parent is already a subtask of this task
+      // (Not applicable for new tasks, but added for consistency)
+    }
+
     // Create task
     const task = await TaskModel.create({
       userId,
@@ -331,6 +346,7 @@ export class TaskService {
       isRecurring: data.isRecurring || false,
       recurrencePattern,
       dependsOn: data.dependsOn || [],
+      parentTaskId: data.parentTaskId,
     });
 
     // Note: Recurring tasks are stored as single task with pattern
@@ -442,6 +458,44 @@ export class TaskService {
         }
       }
       task.dependsOn = data.dependsOn;
+    }
+
+    // Update parent task if provided
+    if (data.parentTaskId !== undefined) {
+      if (data.parentTaskId) {
+        // Validate parent task exists and belongs to the user
+        const parentTask = await TaskModel.findOne({
+          _id: data.parentTaskId,
+          userId,
+        });
+        
+        if (!parentTask) {
+          throw new AppError('Parent task not found', 400);
+        }
+        
+        // Prevent circular relationships - check if the new parent is a subtask of this task
+        if (await this.isSubtaskOf(data.parentTaskId, taskId, userId)) {
+          throw new AppError('Cannot set parent - would create circular relationship', 400);
+        }
+      }
+      task.parentTaskId = data.parentTaskId;
+    }
+
+    // Validate completion - check if this task has incomplete subtasks
+    if (data.status === TaskStatus.COMPLETED) {
+      const incompleteSubtasks = await TaskModel.find({
+        userId,
+        parentTaskId: taskId,
+        status: { $ne: TaskStatus.COMPLETED }
+      });
+      
+      if (incompleteSubtasks.length > 0) {
+        const subtaskTitles = incompleteSubtasks.map(s => s.title).join(', ');
+        throw new AppError(
+          `Cannot complete parent task - the following subtasks must be completed first: ${subtaskTitles}`,
+          400
+        );
+      }
     }
 
     // Validate status change - check if dependencies are complete
@@ -558,6 +612,11 @@ export class TaskService {
 
     await task.save();
 
+    // If this is a subtask that was just completed, check if parent should auto-complete
+    if (task.parentTaskId && data.status === TaskStatus.COMPLETED) {
+      await this.checkAndCompleteParent(userId, task.parentTaskId);
+    }
+
     return await this.toTaskResponse(task);
   }
 
@@ -569,6 +628,88 @@ export class TaskService {
 
     if (result.deletedCount === 0) {
       throw new AppError('Task not found', 404);
+    }
+  }
+
+  /**
+   * Check if a task is a subtask of another (for preventing circular relationships)
+   */
+  private async isSubtaskOf(
+    potentialParentId: string,
+    potentialChildId: string,
+    userId: string
+  ): Promise<boolean> {
+    // Check if potentialParentId is already a subtask of potentialChildId
+    // This would create a circular relationship
+    let currentTask = await TaskModel.findOne({ _id: potentialParentId, userId });
+    
+    while (currentTask && currentTask.parentTaskId) {
+      if (currentTask.parentTaskId === potentialChildId) {
+        return true; // Circular relationship detected
+      }
+      currentTask = await TaskModel.findOne({ _id: currentTask.parentTaskId, userId });
+    }
+    
+    return false;
+  }
+
+  /**
+   * Get all subtasks of a parent task
+   */
+  private async getSubtasks(userId: string, parentTaskId: string): Promise<string[]> {
+    const subtasks = await TaskModel.find({
+      userId,
+      parentTaskId,
+    }).select('_id');
+    
+    return subtasks.map(task => task.id);
+  }
+
+  /**
+   * Calculate progress percentage based on completed subtasks
+   * Returns 0-100, or undefined if no subtasks
+   */
+  private async calculateProgress(userId: string, taskId: string): Promise<number | undefined> {
+    const subtasks = await TaskModel.find({
+      userId,
+      parentTaskId: taskId,
+    });
+    
+    if (subtasks.length === 0) {
+      return undefined; // No subtasks, no progress to calculate
+    }
+    
+    const completedCount = subtasks.filter(
+      task => task.status === TaskStatus.COMPLETED
+    ).length;
+    
+    return Math.round((completedCount / subtasks.length) * 100);
+  }
+
+  /**
+   * Check if all subtasks are completed and auto-complete parent if so
+   */
+  private async checkAndCompleteParent(userId: string, parentTaskId: string): Promise<void> {
+    const subtasks = await TaskModel.find({
+      userId,
+      parentTaskId,
+    });
+    
+    // Check if all subtasks are completed
+    const allCompleted = subtasks.length > 0 && subtasks.every(
+      task => task.status === TaskStatus.COMPLETED
+    );
+    
+    if (allCompleted) {
+      // Auto-complete the parent task
+      const parentTask = await TaskModel.findOne({ _id: parentTaskId, userId });
+      if (parentTask && parentTask.status !== TaskStatus.COMPLETED) {
+        parentTask.status = TaskStatus.COMPLETED;
+        if (parentTask.type === TaskType.DURATION) {
+          parentTask.reminderEnabled = false;
+        }
+        await parentTask.save();
+      }
     }
   }
 
@@ -624,6 +765,10 @@ export class TaskService {
       isBlocked = blockedBy.length > 0;
     }
 
+    // Get subtasks and calculate progress
+    const subtasks = await this.getSubtasks(task.userId, task.id);
+    const progress = await this.calculateProgress(task.userId, task.id);
+
     return {
       id: task.id,
       userId: task.userId,
@@ -648,6 +793,9 @@ export class TaskService {
       dependsOn,
       blockedBy,
       isBlocked,
+      parentTaskId: task.parentTaskId,
+      subtasks: subtasks.length > 0 ? subtasks : undefined,
+      progress,
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
     };

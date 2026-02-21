@@ -2,6 +2,8 @@ import React from 'react';
 import { format } from 'date-fns';
 import { TaskResponse, Priority, TaskStatus, TaskType } from '@smart-task/contracts';
 import { calculateCurrentOccurrence, formatRecurrenceText } from '@/utils/recurrence';
+import { useQuery } from '@tanstack/react-query';
+import { taskApi } from '@/api/tasks';
 
 interface TaskCardProps {
   task: TaskResponse;
@@ -18,6 +20,12 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
   onStatusChange,
   isUpdating = false,
 }) => {
+  // Fetch all tasks to show subtask details
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => taskApi.getTasks(),
+  });
+
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
       case Priority.HIGH:
@@ -61,6 +69,9 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
   const isDurationTask = task.type === TaskType.DURATION;
   const isReminderTask = task.type === TaskType.REMINDER;
   const isRecurringCompleted = currentOccurrence?.isCompleted || false;
+  
+  // Check if task has incomplete subtasks (prevent completion)
+  const hasIncompleteSubtasks = task.subtasks && task.subtasks.length > 0 && task.progress !== 100;
 
   return (
     <div
@@ -176,6 +187,69 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
         </div>
       )}
 
+      {/* Subtasks Info */}
+      {task.subtasks && task.subtasks.length > 0 && (
+        <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-semibold text-purple-800">
+              📋 Subtasks ({task.subtasks.length})
+            </div>
+            {task.progress !== undefined && (
+              <div className="text-xs font-semibold text-purple-800">
+                {task.progress}%
+              </div>
+            )}
+          </div>
+          
+          {/* Progress Bar */}
+          {task.progress !== undefined && (
+            <div className="mb-3 bg-purple-200 rounded-full h-2 overflow-hidden">
+              <div 
+                className="bg-purple-600 h-full transition-all duration-300"
+                style={{ width: `${task.progress}%` }}
+              />
+            </div>
+          )}
+          
+          {/* Subtask List */}
+          <div className="space-y-1">
+            {task.subtasks.map(subtaskId => {
+              const subtask = allTasks.find(t => t.id === subtaskId);
+              if (!subtask) return null;
+              
+              return (
+                <div 
+                  key={subtaskId} 
+                  className="flex items-center gap-2 text-xs p-2 bg-white rounded border border-purple-100"
+                >
+                  <span className="text-sm">
+                    {subtask.status === TaskStatus.COMPLETED ? '✅' : '⬜'}
+                  </span>
+                  <span className={`flex-1 ${subtask.status === TaskStatus.COMPLETED ? 'line-through text-gray-500' : 'text-gray-700'}`}>
+                    {subtask.title}
+                  </span>
+                  <span className={`badge text-[10px] px-1.5 py-0.5 ${
+                    subtask.status === TaskStatus.COMPLETED
+                      ? 'bg-green-100 text-green-700'
+                      : subtask.status === TaskStatus.IN_PROGRESS
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {subtask.status?.replace('-', ' ') || 'pending'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          
+          {task.progress === 100 && (
+            <div className="mt-2 text-xs text-green-700 text-center font-medium">
+              🎉 All subtasks completed!
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Status Change (for duration tasks) */}
       {isDurationTask && task.status !== TaskStatus.COMPLETED && !isRecurringCompleted && (
         <div className="mb-4">
@@ -206,9 +280,15 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
             </button>
             <button
               onClick={() => onStatusChange(task.id, TaskStatus.COMPLETED)}
-              disabled={isUpdating || task.isBlocked}
+              disabled={isUpdating || task.isBlocked || hasIncompleteSubtasks}
               className={`text-xs px-3 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-              title={task.isBlocked ? 'Task is blocked by incomplete dependencies' : ''}
+              title={
+                task.isBlocked 
+                  ? 'Task is blocked by incomplete dependencies' 
+                  : hasIncompleteSubtasks
+                  ? 'Complete all subtasks first'
+                  : ''
+              }
             >
               Complete
             </button>
@@ -221,15 +301,26 @@ const TaskCardComponent: React.FC<TaskCardProps> = ({
         <div className="mb-4">
           <button
             onClick={() => onStatusChange(task.id, TaskStatus.COMPLETED)}
-            disabled={isUpdating || task.isBlocked}
+            disabled={isUpdating || task.isBlocked || hasIncompleteSubtasks}
             className="w-full text-sm px-4 py-2 rounded bg-green-500 text-white hover:bg-green-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            title={task.isBlocked ? 'Task is blocked by incomplete dependencies' : ''}
+            title={
+              task.isBlocked 
+                ? 'Task is blocked by incomplete dependencies' 
+                : hasIncompleteSubtasks
+                ? 'Complete all subtasks first'
+                : ''
+            }
           >
             {isUpdating ? 'Updating...' : `✓ Mark as Complete${task.isRecurring ? ' (Current Occurrence)' : ''}`}
           </button>
           {task.isBlocked && (
             <p className="text-xs text-red-600 mt-1 text-center">
               ⚠️ Complete dependencies first
+            </p>
+          )}
+          {hasIncompleteSubtasks && (
+            <p className="text-xs text-red-600 mt-1 text-center">
+              ⚠️ Complete all subtasks first ({task.progress}% done)
             </p>
           )}
         </div>
@@ -275,6 +366,9 @@ export const TaskCard = React.memo(TaskCardComponent, (prevProps, nextProps) => 
     prevProps.task.priority !== nextProps.task.priority ||
     prevProps.task.reminderEnabled !== nextProps.task.reminderEnabled ||
     prevProps.task.updatedAt !== nextProps.task.updatedAt ||
+    prevProps.task.progress !== nextProps.task.progress ||
+    prevProps.task.parentTaskId !== nextProps.task.parentTaskId ||
+    JSON.stringify(prevProps.task.subtasks) !== JSON.stringify(nextProps.task.subtasks) ||
     JSON.stringify(prevProps.task.recurrencePattern) !== JSON.stringify(nextProps.task.recurrencePattern);
   
   const updatingChanged = prevProps.isUpdating !== nextProps.isUpdating;
