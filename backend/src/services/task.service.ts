@@ -423,6 +423,9 @@ export class TaskService {
       if (dependencies.length !== data.dependsOn.length) {
         throw new AppError('One or more dependency tasks not found', 400);
       }
+      if (dependencies.some((dep) => dep.isRecurring)) {
+        throw new AppError('Recurring tasks cannot be selected as dependencies', 400);
+      }
     }
 
     // Validate parent task exists and belongs to the user
@@ -435,9 +438,16 @@ export class TaskService {
       if (!parentTask) {
         throw new AppError('Parent task not found', 400);
       }
+      if (parentTask.isRecurring) {
+        throw new AppError('Recurring tasks cannot be selected as parent tasks', 400);
+      }
       
       // Prevent circular relationships - check if parent is already a subtask of this task
       // (Not applicable for new tasks, but added for consistency)
+    }
+
+    if (data.projectId && data.isRecurring) {
+      throw new AppError('Recurring tasks cannot be assigned to a project', 400);
     }
 
     // Create task
@@ -588,6 +598,9 @@ export class TaskService {
         if (dependencies.length !== data.dependsOn.length) {
           throw new AppError('One or more dependency tasks not found', 400);
         }
+        if (dependencies.some((dep) => dep.isRecurring)) {
+          throw new AppError('Recurring tasks cannot be selected as dependencies', 400);
+        }
       }
       task.dependsOn = data.dependsOn;
     }
@@ -604,6 +617,9 @@ export class TaskService {
         if (!parentTask) {
           throw new AppError('Parent task not found', 400);
         }
+        if (parentTask.isRecurring) {
+          throw new AppError('Recurring tasks cannot be selected as parent tasks', 400);
+        }
         
         // Prevent circular relationships - check if the new parent is a subtask of this task
         if (await this.isSubtaskOf(data.parentTaskId, taskId, userId)) {
@@ -615,7 +631,10 @@ export class TaskService {
 
     // Update project if provided
     if (data.projectId !== undefined) {
-      task.projectId = data.projectId;
+      if (task.isRecurring && data.projectId) {
+        throw new AppError('Recurring tasks cannot be assigned to a project', 400);
+      }
+      task.projectId = data.projectId || undefined;
     }
 
     // Validate completion - check if this task has incomplete subtasks

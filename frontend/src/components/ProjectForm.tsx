@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CreateProjectDto,
   ProjectResponse,
   CreateProjectSchema,
   PROJECT_COLORS,
+  TaskStatus,
 } from '@smart-task/contracts';
 import { projectApi } from '@/api/projects';
+import { taskApi } from '@/api/tasks';
 import { getErrorMessage } from '@/lib/axios';
 import toast from 'react-hot-toast';
 
@@ -19,6 +21,8 @@ interface ProjectFormProps {
 export const ProjectForm: React.FC<ProjectFormProps> = ({ project, onClose, onSuccess }) => {
   const isEditing = !!project;
   const queryClient = useQueryClient();
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [initializedSelection, setInitializedSelection] = useState(false);
 
   const [formData, setFormData] = useState<CreateProjectDto>({
     name: project?.name || '',
@@ -29,23 +33,49 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ project, onClose, onSu
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => taskApi.getTasks(),
+  });
+
   const createProjectMutation = useMutation({
     mutationFn: isEditing
       ? (data: CreateProjectDto) => projectApi.updateProject(project!.id, data)
       : projectApi.createProject,
-    onSuccess: () => {
-      queryClient.refetchQueries({ queryKey: ['projects'] });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success(isEditing ? 'Project updated successfully!' : 'Project created successfully!');
-      onSuccess?.();
-      onClose();
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error));
-    },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const availableTasks = useMemo(() => {
+    if (!formData.deadline) {
+      return [];
+    }
+
+    const projectDeadlineEndOfDay = new Date(`${formData.deadline}T23:59:59.999`);
+    return allTasks.filter((taskItem) => {
+      if (taskItem.isRecurring) return false;
+      if (taskItem.status === TaskStatus.COMPLETED) return false;
+      if (!taskItem.deadline) return false;
+      if (taskItem.projectId && taskItem.projectId !== project?.id) return false;
+      return new Date(taskItem.deadline) <= projectDeadlineEndOfDay;
+    });
+  }, [allTasks, formData.deadline, project?.id]);
+
+  useEffect(() => {
+    if (!isEditing || !project || initializedSelection) {
+      return;
+    }
+    const projectTaskIds = allTasks
+      .filter((taskItem) => taskItem.projectId === project.id && !taskItem.isRecurring)
+      .map((taskItem) => taskItem.id);
+    setSelectedTaskIds(projectTaskIds);
+    setInitializedSelection(true);
+  }, [allTasks, isEditing, project, initializedSelection]);
+
+  useEffect(() => {
+    const validIds = new Set(availableTasks.map((taskItem) => taskItem.id));
+    setSelectedTaskIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [availableTasks]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
 
@@ -61,7 +91,33 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ project, onClose, onSu
       return;
     }
 
-    createProjectMutation.mutate(formData);
+    try {
+      const savedProject = await createProjectMutation.mutateAsync(formData);
+
+      const existingProjectTaskIds = isEditing
+        ? allTasks
+            .filter((taskItem) => taskItem.projectId === project!.id)
+            .map((taskItem) => taskItem.id)
+        : [];
+
+      const toAssign = selectedTaskIds.filter((id) => !existingProjectTaskIds.includes(id));
+      const toUnassign = existingProjectTaskIds.filter((id) => !selectedTaskIds.includes(id));
+
+      if (toAssign.length > 0 || toUnassign.length > 0) {
+        await Promise.all([
+          ...toAssign.map((taskId) => taskApi.updateTask(taskId, { projectId: savedProject.id })),
+          ...toUnassign.map((taskId) => taskApi.updateTask(taskId, { projectId: '' })),
+        ]);
+      }
+
+      queryClient.refetchQueries({ queryKey: ['projects'] });
+      queryClient.refetchQueries({ queryKey: ['tasks'] });
+      toast.success(isEditing ? 'Project updated successfully!' : 'Project created successfully!');
+      onSuccess?.();
+      onClose();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -163,6 +219,41 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ project, onClose, onSu
               />
               {errors.deadline && (
                 <p className="text-red-500 text-xs mt-1">{errors.deadline}</p>
+              )}
+            </div>
+
+            {/* Task Assignment */}
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Tasks In Project (optional)
+              </label>
+              {!formData.deadline && (
+                <p className="text-xs text-gray-500">
+                  Set a project deadline first. Only non-recurring tasks with deadlines on/before the project deadline are shown.
+                </p>
+              )}
+              {formData.deadline && (
+                <>
+                  <select
+                    multiple
+                    value={selectedTaskIds}
+                    onChange={(e) => {
+                      const selectedOptions = Array.from(e.target.selectedOptions, (option) => option.value);
+                      setSelectedTaskIds(selectedOptions);
+                    }}
+                    className="input min-h-[120px]"
+                    style={{ height: 'auto' }}
+                  >
+                    {availableTasks.map((taskItem) => (
+                      <option key={taskItem.id} value={taskItem.id}>
+                        {taskItem.title} - {new Date(taskItem.deadline!).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Hold Ctrl/Cmd to select multiple tasks. Recurring tasks are excluded.
+                  </p>
+                </>
               )}
             </div>
 

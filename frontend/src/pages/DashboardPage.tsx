@@ -96,6 +96,8 @@ export const DashboardPage: React.FC = () => {
         queryClient.setQueryData<TaskResponse[]>(['tasks'], (old) => 
           old?.map(t => t.id === updatedTask.id ? updatedTask : t) || []
         );
+        // Refetch tasks so parent/subtask progress is refreshed immediately.
+        queryClient.refetchQueries({ queryKey: ['tasks'] });
         // Also refetch projects to update task counts
         queryClient.refetchQueries({ queryKey: ['projects'] });
         toast.success('Status updated');

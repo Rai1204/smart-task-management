@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import {
   CreateTaskDto,
@@ -51,10 +51,19 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
     .slice(0, 16);
 
   // Helper to convert ISO string to datetime-local format
-  const toDateTimeLocal = (isoString: string) => {
-    const date = new Date(isoString);
-    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-    return localDate.toISOString().slice(0, 16);
+  const formatDateTimeLocal = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+  const toDateTimeLocal = (isoString: string) => formatDateTimeLocal(new Date(isoString));
+  const parseProjectDeadlineEndOfDay = (deadlineIsoOrDate: string): Date => {
+    const datePart = deadlineIsoOrDate.slice(0, 10);
+    const [year, month, day] = datePart.split('-').map(Number);
+    return new Date(year, month - 1, day, 23, 59, 59, 999);
   };
 
   const [formData, setFormData] = useState<CreateTaskDto>({
@@ -78,6 +87,116 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const nonRecurringTasks = useMemo(
+    () => allTasks.filter((t) => t.id !== task?.id && !t.isRecurring),
+    [allTasks, task?.id]
+  );
+
+  const dependencyOptions = useMemo(
+    () => nonRecurringTasks.filter((t) => t.status !== TaskStatus.COMPLETED),
+    [nonRecurringTasks]
+  );
+
+  const parentOptions = useMemo(
+    () =>
+      nonRecurringTasks.filter(
+        (t) => !t.parentTaskId && t.status !== TaskStatus.COMPLETED && !!t.deadline
+      ),
+    [nonRecurringTasks]
+  );
+
+  const selectedDependencies = useMemo(
+    () =>
+      (formData.dependsOn || [])
+        .map((depId) => allTasks.find((t) => t.id === depId))
+        .filter((t): t is TaskResponse => !!t),
+    [formData.dependsOn, allTasks]
+  );
+
+  const selectedParentTask = useMemo(
+    () => allTasks.find((t) => t.id === formData.parentTaskId),
+    [allTasks, formData.parentTaskId]
+  );
+  const selectedProject = useMemo(
+    () => allProjects.find((p) => p.id === formData.projectId),
+    [allProjects, formData.projectId]
+  );
+
+  const getTaskEndDate = (taskItem: TaskResponse): Date => {
+    return new Date(taskItem.deadline || taskItem.startDateTime);
+  };
+
+  const maxDependencyEnd = useMemo(() => {
+    if (selectedDependencies.length === 0) {
+      return undefined;
+    }
+    return selectedDependencies.reduce((max, current) => {
+      const currentEnd = getTaskEndDate(current);
+      return currentEnd > max ? currentEnd : max;
+    }, getTaskEndDate(selectedDependencies[0]));
+  }, [selectedDependencies]);
+
+  const maxDate = (a: Date, b: Date): Date => (a > b ? a : b);
+  const minDate = (a: Date, b: Date): Date => (a < b ? a : b);
+  const toLocalDateTime = (date: Date): string => formatDateTimeLocal(date);
+
+  const dependencyMinDateTime = maxDependencyEnd ? toLocalDateTime(maxDependencyEnd) : undefined;
+  const parentDeadlineMax = selectedParentTask?.deadline
+    ? new Date(selectedParentTask.deadline)
+    : undefined;
+  const projectDeadlineMax = selectedProject?.deadline
+    ? parseProjectDeadlineEndOfDay(selectedProject.deadline)
+    : undefined;
+  const taskDeadlineMax = (() => {
+    if (parentDeadlineMax && projectDeadlineMax) {
+      return minDate(parentDeadlineMax, projectDeadlineMax);
+    }
+    return parentDeadlineMax || projectDeadlineMax;
+  })();
+  const taskStartMax = taskDeadlineMax;
+  const taskStartMaxDateTime = taskStartMax ? toLocalDateTime(taskStartMax) : undefined;
+  const taskDeadlineMaxDateTime = taskDeadlineMax ? toLocalDateTime(taskDeadlineMax) : undefined;
+
+  useEffect(() => {
+    setFormData((prev) => {
+      let nextStart = prev.startDateTime;
+      let nextDeadline = prev.deadline;
+
+      if (maxDependencyEnd) {
+        if (!nextStart || new Date(nextStart) < maxDependencyEnd) {
+          nextStart = toLocalDateTime(maxDependencyEnd);
+        }
+        if (nextDeadline && new Date(nextDeadline) < maxDependencyEnd) {
+          nextDeadline = toLocalDateTime(maxDependencyEnd);
+        }
+      }
+
+      if (taskStartMax && nextStart && new Date(nextStart) > taskStartMax) {
+        nextStart = toLocalDateTime(taskStartMax);
+      }
+
+      if (taskDeadlineMax && nextDeadline) {
+        if (new Date(nextDeadline) > taskDeadlineMax) {
+          nextDeadline = toLocalDateTime(taskDeadlineMax);
+        }
+      }
+
+      if (nextStart && nextDeadline && new Date(nextDeadline) < new Date(nextStart)) {
+        nextDeadline = nextStart;
+      }
+
+      if (nextStart === prev.startDateTime && nextDeadline === prev.deadline) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        startDateTime: nextStart,
+        deadline: nextDeadline,
+      };
+    });
+  }, [maxDependencyEnd, taskStartMax, taskDeadlineMax]);
 
   const createTaskMutation = useMutation({
     mutationFn: isEditing 
@@ -118,9 +237,30 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
 
+    let nextValue: string | boolean = type === 'checkbox' ? checked : value;
+    if (typeof nextValue === 'string' && (name === 'startDateTime' || name === 'deadline')) {
+      const asDate = new Date(nextValue);
+
+      if (name === 'startDateTime') {
+        if (taskStartMax && asDate > taskStartMax) {
+          nextValue = toLocalDateTime(taskStartMax);
+        } else if (maxDependencyEnd && asDate < maxDependencyEnd) {
+          nextValue = toLocalDateTime(maxDependencyEnd);
+        }
+      }
+
+      if (name === 'deadline') {
+        if (taskDeadlineMax && asDate > taskDeadlineMax) {
+          nextValue = toLocalDateTime(taskDeadlineMax);
+        } else if (maxDependencyEnd && asDate < maxDependencyEnd) {
+          nextValue = toLocalDateTime(maxDependencyEnd);
+        }
+      }
+    }
+
     setFormData({
       ...formData,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: nextValue,
     });
 
     if (errors[name]) {
@@ -130,6 +270,44 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const validationErrors: Record<string, string> = {};
+    if (taskStartMax && formData.startDateTime) {
+      if (new Date(formData.startDateTime) > taskStartMax) {
+        validationErrors.startDateTime =
+          'Start must be before or equal to the selected project/parent deadline.';
+      }
+    }
+    if (maxDependencyEnd) {
+      if (!formData.startDateTime || new Date(formData.startDateTime) < maxDependencyEnd) {
+        validationErrors.startDateTime =
+          'Start must be after all selected dependency tasks finish.';
+      }
+      if (formData.deadline && new Date(formData.deadline) < maxDependencyEnd) {
+        validationErrors.deadline =
+          'Deadline must be after all selected dependency tasks finish.';
+      }
+    }
+    if (parentDeadlineMax && formData.deadline) {
+      if (new Date(formData.deadline) > parentDeadlineMax) {
+        validationErrors.deadline =
+          'Subtask deadline must be before or equal to the selected parent task deadline.';
+      }
+    }
+    if (projectDeadlineMax && formData.deadline) {
+      if (new Date(formData.deadline) > projectDeadlineMax) {
+        validationErrors.deadline =
+          'Task deadline must be before or equal to the selected project deadline.';
+      }
+    }
+    if (maxDependencyEnd && taskStartMax && maxDependencyEnd > taskStartMax) {
+      validationErrors.startDateTime =
+        'Selected dependencies finish after the selected project/parent deadline. Adjust your selections.';
+    }
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
 
     // Convert datetime-local to ISO string
     const dataToSubmit = {
@@ -372,10 +550,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                 className="input"
               >
                 <option value="">None - Top-level task</option>
-                {allTasks
-                  .filter(t => t.id !== task?.id) // Exclude current task when editing
-                  .filter(t => !t.parentTaskId) // Only show top-level tasks as potential parents
-                  .map(t => (
+                {parentOptions.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.title} ({t.priority})
                     </option>
@@ -422,10 +597,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                 className="input min-h-[100px]"
                 style={{ height: 'auto' }}
               >
-                {allTasks
-                  .filter(t => t.id !== task?.id) // Exclude current task when editing
-                  .filter(t => t.status !== TaskStatus.COMPLETED) // Only show incomplete tasks
-                  .map(t => (
+                {dependencyOptions.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.title} ({t.priority}) - {new Date(t.startDateTime).toLocaleDateString()}
                     </option>
@@ -470,11 +642,21 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                 name="startDateTime"
                 value={formData.startDateTime}
                 onChange={handleChange}
-                min={minDateTime}
+                min={
+                  dependencyMinDateTime
+                    ? toLocalDateTime(maxDate(new Date(minDateTime), new Date(dependencyMinDateTime)))
+                    : minDateTime
+                }
+                max={taskStartMaxDateTime}
                 className={`input ${errors.startDateTime ? 'border-red-500' : ''}`}
               />
               {errors.startDateTime && (
                 <p className="text-red-500 text-sm mt-1">{errors.startDateTime}</p>
+              )}
+              {taskStartMax && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Must be before or equal to: {taskStartMax.toLocaleString()}
+                </p>
               )}
             </div>
 
@@ -490,11 +672,32 @@ export const TaskForm: React.FC<TaskFormProps> = ({ task, onClose, onSuccess }) 
                     name="deadline"
                     value={formData.deadline || ''}
                     onChange={handleChange}
-                    min={formData.startDateTime || minDateTime}
+                    min={(() => {
+                      const currentMin = formData.startDateTime
+                        ? new Date(formData.startDateTime)
+                        : new Date(minDateTime);
+                      const dependencyMin = dependencyMinDateTime
+                        ? new Date(dependencyMinDateTime)
+                        : currentMin;
+                      return toLocalDateTime(maxDate(currentMin, dependencyMin));
+                    })()}
+                    max={taskDeadlineMaxDateTime}
                     className={`input ${errors.deadline ? 'border-red-500' : ''}`}
                   />
                   {errors.deadline && (
                     <p className="text-red-500 text-sm mt-1">{errors.deadline}</p>
+                  )}
+                  {selectedParentTask?.deadline && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Must be before or equal to parent deadline:{' '}
+                      {parentDeadlineMax?.toLocaleString()}
+                    </p>
+                  )}
+                  {selectedProject?.deadline && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Must be before or equal to project deadline:{' '}
+                      {projectDeadlineMax?.toLocaleString()}
+                    </p>
                   )}
                 </div>
 
