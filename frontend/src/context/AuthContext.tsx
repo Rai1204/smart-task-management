@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AuthResponse, UserResponse } from '@smart-task/contracts';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface AuthContextType {
   user: UserResponse | null;
@@ -26,6 +27,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<UserResponse | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     // Load auth data from localStorage on mount
@@ -46,6 +48,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
+    // Stop in-flight authenticated requests and clear cached protected data.
+    void queryClient.cancelQueries();
+    queryClient.clear();
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');

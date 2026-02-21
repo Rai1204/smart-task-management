@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { taskApi } from '@/api/tasks';
 import { projectApi } from '@/api/projects';
+import { useAuth } from '@/context/AuthContext';
 import { Breadcrumbs } from './Breadcrumbs';
 import ThemeToggle from './ThemeToggle';
 
@@ -23,16 +24,19 @@ export const Header: React.FC = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
-  // Fetch tasks and projects for search
+  // Fetch tasks and projects for search - only if authenticated
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => taskApi.getTasks(),
+    enabled: isAuthenticated,
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectApi.getProjects(),
+    enabled: isAuthenticated,
   });
 
   // Search through tasks, projects, and pages

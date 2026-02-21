@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { taskApi } from '@/api/tasks';
 import toast from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
+import { useAuth } from '@/context/AuthContext';
 
 interface DailyWorkload {
   date: string;
@@ -26,20 +28,22 @@ interface WorkloadSummary {
 
 export const WorkloadChart: React.FC = () => {
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
   const [workload, setWorkload] = useState<WorkloadSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setWorkload(null);
+      setLoading(false);
+      return;
+    }
+
     fetchWorkload();
-    
-    // Listen for task changes and refresh
-    const handleTaskChange = () => {
-      fetchWorkload();
-    };
-    
+
     // Refetch when tasks query is invalidated
     const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (event?.query?.queryKey?.[0] === 'tasks') {
+      if (event?.query?.queryKey?.[0] === 'tasks' && isAuthenticated) {
         fetchWorkload();
       }
     });
@@ -47,13 +51,17 @@ export const WorkloadChart: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [queryClient]);
+  }, [queryClient, isAuthenticated]);
 
   const fetchWorkload = async () => {
     try {
+      setLoading(true);
       const data = await taskApi.getCurrentWeekWorkload();
       setWorkload(data);
     } catch (error) {
+      if (axios.isCancel(error)) {
+        return;
+      }
       console.error('Failed to fetch workload:', error);
       toast.error('Failed to load workload data');
     } finally {

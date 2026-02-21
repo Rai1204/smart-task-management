@@ -14,6 +14,15 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('token');
+
+    const requestPath = config.url ?? '';
+    const isAuthEndpoint =
+      requestPath.includes('/auth/login') || requestPath.includes('/auth/register');
+
+    if (!token && !isAuthEndpoint) {
+      throw new axios.CanceledError('No auth token available');
+    }
+
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
